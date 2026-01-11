@@ -20,6 +20,38 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Color Scheme
+
+### Primary brand: Emerald
+
+- `emerald-50`: Light backgrounds
+- `emerald-100`: Subtle borders, light text (e.g., header subtitle)
+- `emerald-200`: Borders, hover borders
+- `emerald-300`: Hover border states
+- `emerald-600`: Primary buttons, header gradient start
+- `emerald-700`: Header gradient end, button hover states
+
+### Text/neutral: Gray
+
+- `gray-500`: Subtle/muted text
+- `gray-600`: Body text
+- `gray-700`: Body text
+- `gray-800`: Text on white backgrounds
+- `gray-900`: Headings, dark buttons (like "Copy" button)
+
+### Accent
+
+- `white`: Backgrounds, text on dark sections
+- `gray-900/gray-800`: Dark buttons (Copy button uses gray-900)
+
+### Pattern Usage
+
+- **Header**: `from-emerald-600 to-emerald-700` gradient with white text
+- **Primary CTAs**: `bg-emerald-600` with `hover:bg-emerald-700`
+- **Secondary buttons**: `bg-white text-emerald-700` with `border-emerald-200`
+- **Background sections**: `bg-emerald-50` or `from-emerald-50 to-white` gradients
+- **Text on dark**: `text-emerald-100` or `text-emerald-50`
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
