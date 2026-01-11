@@ -43,6 +43,17 @@ type PlayerProfile = {
   updated_at: string;
 };
 
+type PlayerGoal = {
+  id: string;
+  player_id: string;
+  name: string;
+  due_date: string | null; // YYYY-MM-DD
+  completed: boolean;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 async function api<T>(
   path: string,
   opts: RequestInit & { securityCode: string }
@@ -157,6 +168,12 @@ export default function AdminPlayerClient(props: {
 
   // Testing evaluations
   const [tests, setTests] = useState<PlayerTest[]>([]);
+  const [goals, setGoals] = useState<PlayerGoal[]>([]);
+  const [newGoalName, setNewGoalName] = useState("");
+  const [newGoalDueDate, setNewGoalDueDate] = useState<string>("");
+  const [goalDrafts, setGoalDrafts] = useState<
+    Record<string, { name: string; due_date: string }>
+  >({});
   const [testName, setTestName] = useState<string>(
     TEST_DEFINITIONS[0]?.name ?? ""
   );
@@ -222,6 +239,65 @@ export default function AdminPlayerClient(props: {
       { method: "GET", securityCode: code }
     );
     setProfiles(data.profiles);
+  }
+
+  async function loadGoals(code: string, id: string) {
+    const data = await api<{ goals: PlayerGoal[] }>(
+      `/api/admin/players/${id}/goals`,
+      { method: "GET", securityCode: code }
+    );
+    setGoals(data.goals ?? []);
+    setGoalDrafts((prev) => {
+      const next = { ...prev };
+      for (const g of data.goals ?? []) {
+        if (!next[g.id]) {
+          next[g.id] = { name: g.name, due_date: g.due_date ?? "" };
+        }
+      }
+      return next;
+    });
+  }
+
+  async function createGoal(code: string, id: string) {
+    const name = newGoalName.trim();
+    if (!name) {
+      setErrMsg("Goal name is required.");
+      return;
+    }
+    const due = newGoalDueDate.trim();
+    await api<{ goal: PlayerGoal }>(`/api/admin/players/${id}/goals`, {
+      method: "POST",
+      securityCode: code,
+      body: JSON.stringify({ name, due_date: due || null }),
+    });
+    setNewGoalName("");
+    setNewGoalDueDate("");
+    await loadGoals(code, id);
+  }
+
+  async function saveGoal(
+    code: string,
+    playerId: string,
+    goalId: string,
+    patch: Partial<Pick<PlayerGoal, "name" | "due_date" | "completed">>
+  ) {
+    await api<{ goal: PlayerGoal }>(
+      `/api/admin/players/${playerId}/goals/${goalId}`,
+      {
+        method: "PATCH",
+        securityCode: code,
+        body: JSON.stringify(patch),
+      }
+    );
+    await loadGoals(code, playerId);
+  }
+
+  async function deleteGoal(code: string, playerId: string, goalId: string) {
+    await api<{ ok: true }>(`/api/admin/players/${playerId}/goals/${goalId}`, {
+      method: "DELETE",
+      securityCode: code,
+    });
+    await loadGoals(code, playerId);
   }
 
   const [editingTestId, setEditingTestId] = useState<string | null>(null);
@@ -526,6 +602,7 @@ export default function AdminPlayerClient(props: {
                     await loadPlayer(securityCode, playerId);
                     await loadTests(securityCode, playerId);
                     await loadProfiles(securityCode, playerId);
+                    await loadGoals(securityCode, playerId);
                   } catch (e) {
                     setAuthError(
                       e instanceof Error ? e.message : "Unauthorized"
@@ -564,6 +641,7 @@ export default function AdminPlayerClient(props: {
                       await loadPlayer(securityCode, playerId);
                       await loadTests(securityCode, playerId);
                       await loadProfiles(securityCode, playerId);
+                      await loadGoals(securityCode, playerId);
                       setMsg("Refreshed.");
                     }}
                     disabled={isPending}
@@ -670,6 +748,321 @@ export default function AdminPlayerClient(props: {
                     })
                   }
                 />
+              </div>
+
+              <div className="mt-8 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">
+                      Goals
+                    </div>
+                    <div className="mt-1 text-sm text-gray-600">
+                      Add, edit, and complete goals for this player.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <input
+                    value={newGoalName}
+                    onChange={(e) => setNewGoalName(e.target.value)}
+                    placeholder="New goal (e.g., 50 juggles without drop)"
+                    className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50 sm:col-span-2"
+                  />
+                  <input
+                    value={newGoalDueDate}
+                    onChange={(e) => setNewGoalDueDate(e.target.value)}
+                    type="date"
+                    className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+                  />
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => {
+                      if (!playerId) return;
+                      setMsg(null);
+                      setErrMsg(null);
+                      startTransition(async () => {
+                        try {
+                          await createGoal(securityCode, playerId);
+                          setMsg("Goal added.");
+                        } catch (e) {
+                          setErrMsg(
+                            e instanceof Error
+                              ? e.message
+                              : "Failed to add goal."
+                          );
+                        }
+                      });
+                    }}
+                    className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    Add goal
+                  </button>
+                </div>
+
+                {(() => {
+                  const todo = goals.filter((g) => !g.completed);
+                  const done = goals.filter((g) => g.completed);
+
+                  return (
+                    <div className="mt-5 space-y-5">
+                      <div>
+                        <div className="text-xs font-semibold text-gray-900">
+                          To do
+                        </div>
+                        <div className="mt-2 grid gap-2">
+                          {todo.length === 0 ? (
+                            <div className="text-sm text-gray-600">
+                              No active goals yet.
+                            </div>
+                          ) : (
+                            todo.map((g) => {
+                              const d = goalDrafts[g.id] ?? {
+                                name: g.name,
+                                due_date: g.due_date ?? "",
+                              };
+                              return (
+                                <div
+                                  key={g.id}
+                                  className="rounded-2xl border border-emerald-200 bg-white p-4"
+                                >
+                                  <div className="flex flex-wrap items-start justify-between gap-3">
+                                    <label className="flex items-start gap-3">
+                                      <input
+                                        type="checkbox"
+                                        checked={g.completed}
+                                        onChange={(e) => {
+                                          if (!playerId) return;
+                                          const next = e.target.checked;
+                                          startTransition(async () => {
+                                            try {
+                                              await saveGoal(
+                                                securityCode,
+                                                playerId,
+                                                g.id,
+                                                { completed: next }
+                                              );
+                                            } catch (e2) {
+                                              setErrMsg(
+                                                e2 instanceof Error
+                                                  ? e2.message
+                                                  : "Failed to update goal."
+                                              );
+                                            }
+                                          });
+                                        }}
+                                        className="mt-1 h-4 w-4 accent-emerald-600"
+                                      />
+                                      <div className="min-w-[240px] flex-1">
+                                        <input
+                                          value={d.name}
+                                          onChange={(e) =>
+                                            setGoalDrafts((prev) => ({
+                                              ...prev,
+                                              [g.id]: {
+                                                ...d,
+                                                name: e.target.value,
+                                              },
+                                            }))
+                                          }
+                                          className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+                                        />
+                                        <div className="mt-2">
+                                          <input
+                                            value={d.due_date}
+                                            onChange={(e) =>
+                                              setGoalDrafts((prev) => ({
+                                                ...prev,
+                                                [g.id]: {
+                                                  ...d,
+                                                  due_date: e.target.value,
+                                                },
+                                              }))
+                                            }
+                                            type="date"
+                                            className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+                                          />
+                                        </div>
+                                      </div>
+                                    </label>
+
+                                    <div className="flex flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        disabled={isPending}
+                                        onClick={() => {
+                                          if (!playerId) return;
+                                          setMsg(null);
+                                          setErrMsg(null);
+                                          startTransition(async () => {
+                                            try {
+                                              await saveGoal(
+                                                securityCode,
+                                                playerId,
+                                                g.id,
+                                                {
+                                                  name: d.name.trim(),
+                                                  due_date: d.due_date || null,
+                                                }
+                                              );
+                                              setMsg("Goal saved.");
+                                            } catch (e2) {
+                                              setErrMsg(
+                                                e2 instanceof Error
+                                                  ? e2.message
+                                                  : "Failed to save goal."
+                                              );
+                                            }
+                                          });
+                                        }}
+                                        className="rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:opacity-60"
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={isPending}
+                                        onClick={() => {
+                                          if (!playerId) return;
+                                          if (
+                                            window.confirm(
+                                              `Delete goal "${g.name}"?`
+                                            )
+                                          ) {
+                                            setMsg(null);
+                                            setErrMsg(null);
+                                            startTransition(async () => {
+                                              try {
+                                                await deleteGoal(
+                                                  securityCode,
+                                                  playerId,
+                                                  g.id
+                                                );
+                                                setMsg("Goal deleted.");
+                                              } catch (e2) {
+                                                setErrMsg(
+                                                  e2 instanceof Error
+                                                    ? e2.message
+                                                    : "Failed to delete goal."
+                                                );
+                                              }
+                                            });
+                                          }
+                                        }}
+                                        className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-300 disabled:opacity-60"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs font-semibold text-gray-900">
+                          Completed
+                        </div>
+                        <div className="mt-2 grid gap-2">
+                          {done.length === 0 ? (
+                            <div className="text-sm text-gray-600">
+                              No completed goals yet.
+                            </div>
+                          ) : (
+                            done.map((g) => (
+                              <div
+                                key={g.id}
+                                className="rounded-2xl border border-emerald-200 bg-white px-4 py-3"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <label className="flex items-center gap-3">
+                                    <input
+                                      type="checkbox"
+                                      checked={g.completed}
+                                      onChange={(e) => {
+                                        if (!playerId) return;
+                                        const next = e.target.checked;
+                                        startTransition(async () => {
+                                          try {
+                                            await saveGoal(
+                                              securityCode,
+                                              playerId,
+                                              g.id,
+                                              { completed: next }
+                                            );
+                                          } catch (e2) {
+                                            setErrMsg(
+                                              e2 instanceof Error
+                                                ? e2.message
+                                                : "Failed to update goal."
+                                            );
+                                          }
+                                        });
+                                      }}
+                                      className="h-4 w-4 accent-emerald-600"
+                                    />
+                                    <div>
+                                      <div className="text-sm font-semibold text-gray-900 line-through">
+                                        {g.name}
+                                      </div>
+                                      <div className="mt-0.5 text-xs text-gray-600">
+                                        {g.completed_at
+                                          ? `Completed ${new Date(
+                                              g.completed_at
+                                            ).toLocaleDateString()}`
+                                          : "Completed"}
+                                        {g.due_date
+                                          ? ` • Due ${g.due_date}`
+                                          : ""}
+                                      </div>
+                                    </div>
+                                  </label>
+                                  <button
+                                    type="button"
+                                    disabled={isPending}
+                                    onClick={() => {
+                                      if (!playerId) return;
+                                      if (
+                                        window.confirm(
+                                          `Delete completed goal "${g.name}"?`
+                                        )
+                                      ) {
+                                        startTransition(async () => {
+                                          try {
+                                            await deleteGoal(
+                                              securityCode,
+                                              playerId,
+                                              g.id
+                                            );
+                                          } catch (e2) {
+                                            setErrMsg(
+                                              e2 instanceof Error
+                                                ? e2.message
+                                                : "Failed to delete goal."
+                                            );
+                                          }
+                                        });
+                                      }
+                                    }}
+                                    className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-300 disabled:opacity-60"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
