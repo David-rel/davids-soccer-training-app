@@ -54,6 +54,23 @@ type PlayerGoal = {
   updated_at: string;
 };
 
+type PlayerSession = {
+  id: string;
+  player_id: string;
+  session_date: string; // YYYY-MM-DD
+  title: string;
+  session_plan: string | null;
+  focus_areas: string | null;
+  activities: string | null;
+  things_to_try: string | null;
+  notes: string | null;
+  admin_notes: string | null;
+  published: boolean;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 async function api<T>(
   path: string,
   opts: RequestInit & { securityCode: string }
@@ -184,6 +201,7 @@ export default function AdminPlayerClient(props: {
     Array.from({ length: 5 }, () => "")
   );
   const [skillMovesCount, setSkillMovesCount] = useState<number>(6);
+  const [skillMovesMinCount, setSkillMovesMinCount] = useState<number>(1);
   const [skillMoves, setSkillMoves] = useState<
     Array<{ name: string; score: string }>
   >(
@@ -191,6 +209,27 @@ export default function AdminPlayerClient(props: {
   );
 
   const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
+
+  // Training sessions
+  const [sessions, setSessions] = useState<PlayerSession[]>([]);
+  const [newSessionTitle, setNewSessionTitle] = useState("");
+  const [newSessionDate, setNewSessionDate] = useState("");
+  const [newSessionPlan, setNewSessionPlan] = useState("");
+  const [newSessionFocus, setNewSessionFocus] = useState("");
+  const [newSessionActivities, setNewSessionActivities] = useState("");
+  const [newSessionThingsToTry, setNewSessionThingsToTry] = useState("");
+  const [newSessionNotes, setNewSessionNotes] = useState("");
+  const [newSessionAdminNotes, setNewSessionAdminNotes] = useState("");
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editSessionTitle, setEditSessionTitle] = useState("");
+  const [editSessionDate, setEditSessionDate] = useState("");
+  const [editSessionPlan, setEditSessionPlan] = useState("");
+  const [editSessionFocus, setEditSessionFocus] = useState("");
+  const [editSessionActivities, setEditSessionActivities] = useState("");
+  const [editSessionThingsToTry, setEditSessionThingsToTry] = useState("");
+  const [editSessionNotes, setEditSessionNotes] = useState("");
+  const [editSessionAdminNotes, setEditSessionAdminNotes] = useState("");
+  const [editSessionPublished, setEditSessionPublished] = useState(false);
 
   const computed = useMemo(
     () => calcBirthMeta(draft?.birthdate ?? null),
@@ -298,6 +337,95 @@ export default function AdminPlayerClient(props: {
       securityCode: code,
     });
     await loadGoals(code, playerId);
+  }
+
+  async function loadSessions(code: string, id: string) {
+    const data = await api<{ sessions: PlayerSession[] }>(
+      `/api/admin/players/${id}/sessions`,
+      { method: "GET", securityCode: code }
+    );
+    setSessions(data.sessions ?? []);
+  }
+
+  async function createSession(code: string, id: string) {
+    const title = newSessionTitle.trim();
+    if (!title) {
+      setErrMsg("Session title is required.");
+      return;
+    }
+    const date = newSessionDate.trim();
+    if (!date) {
+      setErrMsg("Session date is required.");
+      return;
+    }
+    await api<{ session: PlayerSession }>(
+      `/api/admin/players/${id}/sessions`,
+      {
+        method: "POST",
+        securityCode: code,
+        body: JSON.stringify({
+          title,
+          session_date: date,
+          session_plan: newSessionPlan.trim() || null,
+          focus_areas: newSessionFocus.trim() || null,
+          activities: newSessionActivities.trim() || null,
+          things_to_try: newSessionThingsToTry.trim() || null,
+          notes: newSessionNotes.trim() || null,
+          admin_notes: newSessionAdminNotes.trim() || null,
+        }),
+      }
+    );
+    setNewSessionTitle("");
+    setNewSessionDate("");
+    setNewSessionPlan("");
+    setNewSessionFocus("");
+    setNewSessionActivities("");
+    setNewSessionThingsToTry("");
+    setNewSessionNotes("");
+    setNewSessionAdminNotes("");
+    await loadSessions(code, id);
+  }
+
+  async function saveSession(
+    code: string,
+    playerId: string,
+    sessionId: string
+  ) {
+    await api<{ session: PlayerSession }>(
+      `/api/admin/players/${playerId}/sessions/${sessionId}`,
+      {
+        method: "PATCH",
+        securityCode: code,
+        body: JSON.stringify({
+          title: editSessionTitle,
+          session_date: editSessionDate,
+          session_plan: editSessionPlan.trim() || null,
+          focus_areas: editSessionFocus.trim() || null,
+          activities: editSessionActivities.trim() || null,
+          things_to_try: editSessionThingsToTry.trim() || null,
+          notes: editSessionNotes.trim() || null,
+          admin_notes: editSessionAdminNotes.trim() || null,
+          published: editSessionPublished,
+        }),
+      }
+    );
+    setEditingSessionId(null);
+    await loadSessions(code, playerId);
+  }
+
+  async function deleteSession(
+    code: string,
+    playerId: string,
+    sessionId: string
+  ) {
+    await api<{ ok: true }>(
+      `/api/admin/players/${playerId}/sessions/${sessionId}`,
+      {
+        method: "DELETE",
+        securityCode: code,
+      }
+    );
+    await loadSessions(code, playerId);
   }
 
   const [editingTestId, setEditingTestId] = useState<string | null>(null);
@@ -603,6 +731,7 @@ export default function AdminPlayerClient(props: {
                     await loadTests(securityCode, playerId);
                     await loadProfiles(securityCode, playerId);
                     await loadGoals(securityCode, playerId);
+                    await loadSessions(securityCode, playerId);
                   } catch (e) {
                     setAuthError(
                       e instanceof Error ? e.message : "Unauthorized"
@@ -642,6 +771,7 @@ export default function AdminPlayerClient(props: {
                       await loadTests(securityCode, playerId);
                       await loadProfiles(securityCode, playerId);
                       await loadGoals(securityCode, playerId);
+                      await loadSessions(securityCode, playerId);
                       setMsg("Refreshed.");
                     }}
                     disabled={isPending}
@@ -1065,6 +1195,348 @@ export default function AdminPlayerClient(props: {
                 })()}
               </div>
 
+              <div className="mt-8 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
+                <div className="text-sm font-semibold text-gray-900">
+                  Training sessions
+                </div>
+                <p className="mt-1 text-sm text-gray-600">
+                  Record training sessions and publish them to parents.
+                </p>
+
+                <div className="mt-4 grid gap-4">
+                  <Field
+                    label="Session title"
+                    value={newSessionTitle}
+                    onChange={setNewSessionTitle}
+                    placeholder="e.g., Pre-Game Prep"
+                  />
+                  <Field
+                    label="Session date"
+                    value={newSessionDate}
+                    onChange={setNewSessionDate}
+                    type="date"
+                  />
+                  <TextArea
+                    label="Session plan"
+                    value={newSessionPlan}
+                    onChange={setNewSessionPlan}
+                    placeholder="What was planned for the session..."
+                  />
+                  <TextArea
+                    label="Focus areas"
+                    value={newSessionFocus}
+                    onChange={setNewSessionFocus}
+                    placeholder="Primary focus of the session..."
+                  />
+                  <TextArea
+                    label="Activities"
+                    value={newSessionActivities}
+                    onChange={setNewSessionActivities}
+                    placeholder="What was actually worked on..."
+                  />
+                  <TextArea
+                    label="Things to try"
+                    value={newSessionThingsToTry}
+                    onChange={setNewSessionThingsToTry}
+                    placeholder="New techniques or skills to practice..."
+                  />
+                  <TextArea
+                    label="Notes"
+                    value={newSessionNotes}
+                    onChange={setNewSessionNotes}
+                    placeholder="General notes about the session..."
+                  />
+                  <TextArea
+                    label="Admin notes (private)"
+                    value={newSessionAdminNotes}
+                    onChange={setNewSessionAdminNotes}
+                    placeholder="Your private coaching observations (never visible to parents)..."
+                  />
+
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => {
+                      startTransition(async () => {
+                        try {
+                          if (!playerId) return;
+                          await createSession(securityCode, playerId);
+                          setMsg("Session created.");
+                        } catch (e) {
+                          setErrMsg(
+                            e instanceof Error
+                              ? e.message
+                              : "Failed to create session."
+                          );
+                        }
+                      });
+                    }}
+                    className="rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-md disabled:opacity-50"
+                  >
+                    Save session
+                  </button>
+                </div>
+
+                {sessions.length > 0 && (
+                  <div className="mt-5 border-t border-emerald-200 pt-4">
+                    <div className="text-xs font-semibold text-gray-900">
+                      All sessions
+                    </div>
+                    <div className="mt-3 grid gap-2">
+                      {sessions.map((s) => (
+                        <div
+                          key={s.id}
+                          className="rounded-2xl border border-emerald-200 bg-white px-4 py-3"
+                        >
+                          {editingSessionId === s.id ? (
+                            <div className="space-y-3">
+                              <Field
+                                label="Session title"
+                                value={editSessionTitle}
+                                onChange={setEditSessionTitle}
+                              />
+                              <Field
+                                label="Session date"
+                                value={editSessionDate}
+                                onChange={setEditSessionDate}
+                                type="date"
+                              />
+                              <TextArea
+                                label="Session plan"
+                                value={editSessionPlan}
+                                onChange={setEditSessionPlan}
+                              />
+                              <TextArea
+                                label="Focus areas"
+                                value={editSessionFocus}
+                                onChange={setEditSessionFocus}
+                              />
+                              <TextArea
+                                label="Activities"
+                                value={editSessionActivities}
+                                onChange={setEditSessionActivities}
+                              />
+                              <TextArea
+                                label="Things to try"
+                                value={editSessionThingsToTry}
+                                onChange={setEditSessionThingsToTry}
+                              />
+                              <TextArea
+                                label="Notes"
+                                value={editSessionNotes}
+                                onChange={setEditSessionNotes}
+                              />
+                              <TextArea
+                                label="Admin notes (private)"
+                                value={editSessionAdminNotes}
+                                onChange={setEditSessionAdminNotes}
+                              />
+
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={editSessionPublished}
+                                  onChange={(e) =>
+                                    setEditSessionPublished(e.target.checked)
+                                  }
+                                  className="h-4 w-4 rounded border-emerald-200"
+                                />
+                                <label className="text-sm font-medium text-gray-700">
+                                  Published (visible to parents)
+                                </label>
+                              </div>
+
+                              <div className="flex flex-wrap justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingSessionId(null)}
+                                  className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isPending}
+                                  onClick={() => {
+                                    startTransition(async () => {
+                                      try {
+                                        if (!playerId) return;
+                                        await saveSession(
+                                          securityCode,
+                                          playerId,
+                                          s.id
+                                        );
+                                        setMsg("Session updated.");
+                                      } catch (e) {
+                                        setErrMsg(
+                                          e instanceof Error
+                                            ? e.message
+                                            : "Failed to update session."
+                                        );
+                                      }
+                                    });
+                                  }}
+                                  className="rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:shadow-md disabled:opacity-50"
+                                >
+                                  Save
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="text-sm font-semibold text-gray-900">
+                                    {s.title}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {s.session_date}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {s.published ? (
+                                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                                      Published
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                                      Draft
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {s.session_plan && (
+                                <div className="mt-2">
+                                  <div className="text-xs font-semibold text-gray-900">
+                                    Session plan
+                                  </div>
+                                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                                    {s.session_plan}
+                                  </div>
+                                </div>
+                              )}
+
+                              {s.focus_areas && (
+                                <div className="mt-2">
+                                  <div className="text-xs font-semibold text-gray-900">
+                                    Focus areas
+                                  </div>
+                                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                                    {s.focus_areas}
+                                  </div>
+                                </div>
+                              )}
+
+                              {s.activities && (
+                                <div className="mt-2">
+                                  <div className="text-xs font-semibold text-gray-900">
+                                    Activities
+                                  </div>
+                                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                                    {s.activities}
+                                  </div>
+                                </div>
+                              )}
+
+                              {s.things_to_try && (
+                                <div className="mt-2">
+                                  <div className="text-xs font-semibold text-gray-900">
+                                    Things to try
+                                  </div>
+                                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                                    {s.things_to_try}
+                                  </div>
+                                </div>
+                              )}
+
+                              {s.notes && (
+                                <div className="mt-2">
+                                  <div className="text-xs font-semibold text-gray-900">
+                                    Notes
+                                  </div>
+                                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                                    {s.notes}
+                                  </div>
+                                </div>
+                              )}
+
+                              {s.admin_notes && (
+                                <div className="mt-2">
+                                  <div className="text-xs font-semibold text-gray-900">
+                                    Admin notes (private)
+                                  </div>
+                                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                                    {s.admin_notes}
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSessionId(s.id);
+                                    setEditSessionTitle(s.title);
+                                    setEditSessionDate(s.session_date);
+                                    setEditSessionPlan(s.session_plan ?? "");
+                                    setEditSessionFocus(s.focus_areas ?? "");
+                                    setEditSessionActivities(s.activities ?? "");
+                                    setEditSessionThingsToTry(
+                                      s.things_to_try ?? ""
+                                    );
+                                    setEditSessionNotes(s.notes ?? "");
+                                    setEditSessionAdminNotes(
+                                      s.admin_notes ?? ""
+                                    );
+                                    setEditSessionPublished(s.published);
+                                  }}
+                                  className="rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isPending}
+                                  onClick={() => {
+                                    if (
+                                      !confirm(
+                                        "Are you sure you want to delete this session?"
+                                      )
+                                    )
+                                      return;
+                                    startTransition(async () => {
+                                      try {
+                                        if (!playerId) return;
+                                        await deleteSession(
+                                          securityCode,
+                                          playerId,
+                                          s.id
+                                        );
+                                        setMsg("Session deleted.");
+                                      } catch (e) {
+                                        setErrMsg(
+                                          e instanceof Error
+                                            ? e.message
+                                            : "Failed to delete session."
+                                        );
+                                      }
+                                    });
+                                  }}
+                                  className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:border-red-300 disabled:opacity-50"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
                 <button
                   type="button"
@@ -1156,13 +1628,85 @@ export default function AdminPlayerClient(props: {
                           setOneVOneRounds(Array.from({ length: 5 }, () => ""));
                         }
                         if (next === "Skill Moves") {
-                          setSkillMovesCount(6);
-                          setSkillMoves(
-                            Array.from({ length: 6 }, (_, i) => ({
-                              name: `Move ${i + 1}`,
-                              score: "",
-                            }))
-                          );
+                          // Collect ALL unique move names and their most recent scores
+                          const allSkillMovesTests = tests
+                            .filter((t) => t.test_name === "Skill Moves")
+                            .sort((a, b) => {
+                              if (a.test_date !== b.test_date) {
+                                return b.test_date.localeCompare(a.test_date);
+                              }
+                              return b.created_at.localeCompare(a.created_at);
+                            });
+
+                          if (allSkillMovesTests.length > 0) {
+                            // Build a map of move name -> most recent score
+                            const moveScoresMap = new Map<string, string>();
+
+                            // Process tests from newest to oldest, so earlier iterations set the most recent scores
+                            for (const test of allSkillMovesTests) {
+                              const scores = test.scores ?? {};
+                              const movesRaw = (scores as { moves?: unknown }).moves;
+
+                              if (Array.isArray(movesRaw)) {
+                                movesRaw.forEach((m) => {
+                                  const obj = (m ?? {}) as Record<string, unknown>;
+                                  const name = String(obj.name ?? "").trim();
+                                  if (name && !moveScoresMap.has(name)) {
+                                    // First time seeing this move (most recent)
+                                    const score = obj.score === null || obj.score === undefined
+                                      ? ""
+                                      : String(obj.score);
+                                    moveScoresMap.set(name, score);
+                                  }
+                                });
+                              } else {
+                                // Legacy format
+                                Object.entries(scores).forEach(([k, v]) => {
+                                  const m = /^skillmove_name_(\d+)$/.exec(k);
+                                  if (m) {
+                                    const name = String(v ?? "").trim();
+                                    if (name && !moveScoresMap.has(name)) {
+                                      const idx = Number(m[1]);
+                                      const scoreKey = `skillmove_${idx}`;
+                                      const score = scores[scoreKey] === null || scores[scoreKey] === undefined
+                                        ? ""
+                                        : String(scores[scoreKey]);
+                                      moveScoresMap.set(name, score);
+                                    }
+                                  }
+                                });
+                              }
+                            }
+
+                            // Convert to array
+                            const movesWithScores = Array.from(moveScoresMap.entries()).map(([name, score]) => ({
+                              name,
+                              score,
+                            }));
+
+                            const minCount = movesWithScores.length; // Can't have fewer than existing moves
+                            const count = Math.max(6, movesWithScores.length + 2);
+
+                            setSkillMovesMinCount(minCount);
+                            setSkillMovesCount(count);
+                            setSkillMoves([
+                              ...movesWithScores,
+                              ...Array.from({ length: count - movesWithScores.length }, (_, i) => ({
+                                name: `Move ${movesWithScores.length + i + 1}`,
+                                score: "",
+                              })),
+                            ]);
+                          } else {
+                            // No previous test - use default blank moves
+                            setSkillMovesMinCount(1);
+                            setSkillMovesCount(6);
+                            setSkillMoves(
+                              Array.from({ length: 6 }, (_, i) => ({
+                                name: `Move ${i + 1}`,
+                                score: "",
+                              }))
+                            );
+                          }
                         }
                       }}
                       className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
@@ -1239,15 +1783,10 @@ export default function AdminPlayerClient(props: {
                             <div className="text-sm text-gray-700">
                               Number of moves
                             </div>
-                            <input
+                            <select
                               value={String(skillMovesCount)}
                               onChange={(e) => {
-                                const next = clampCount(
-                                  e.target.value,
-                                  1,
-                                  50,
-                                  6
-                                );
+                                const next = Number(e.target.value);
                                 setSkillMovesCount(next);
                                 setSkillMoves((prev) =>
                                   resizeArray(prev, next, (i) => ({
@@ -1256,9 +1795,14 @@ export default function AdminPlayerClient(props: {
                                   }))
                                 );
                               }}
-                              inputMode="numeric"
                               className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                            />
+                            >
+                              {Array.from({ length: 51 - skillMovesMinCount }, (_, i) => skillMovesMinCount + i).map((num) => (
+                                <option key={num} value={num}>
+                                  {num}
+                                </option>
+                              ))}
+                            </select>
                           </div>
 
                           {skillMoves.map((m, i) => (
@@ -1595,15 +2139,10 @@ export default function AdminPlayerClient(props: {
                                           <div className="text-sm text-gray-700">
                                             Number of moves
                                           </div>
-                                          <input
+                                          <select
                                             value={String(editSkillMovesCount)}
                                             onChange={(e) => {
-                                              const next = clampCount(
-                                                e.target.value,
-                                                1,
-                                                50,
-                                                6
-                                              );
+                                              const next = Number(e.target.value);
                                               setEditSkillMovesCount(next);
                                               setEditSkillMoves((prev) =>
                                                 resizeArray(
@@ -1616,9 +2155,14 @@ export default function AdminPlayerClient(props: {
                                                 )
                                               );
                                             }}
-                                            inputMode="numeric"
                                             className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                                          />
+                                          >
+                                            {Array.from({ length: 50 }, (_, i) => i + 1).map((num) => (
+                                              <option key={num} value={num}>
+                                                {num}
+                                              </option>
+                                            ))}
+                                          </select>
                                         </div>
                                         {editSkillMoves.map((m, i) => (
                                           <div

@@ -116,6 +116,210 @@ function pickLatestByTest(tests: PlayerTestRow[]) {
   return { byName, latest };
 }
 
+function computeMetricsForSingleTest(
+  testName: string,
+  scores: Record<string, unknown>
+): Record<string, number | null> {
+  const metrics: Record<string, number | null> = {};
+
+  // POWER
+  if (testName === "Power") {
+    const strong = [1, 2, 3, 4].map((i) => num(scores, `power_strong_${i}`));
+    const weak = [1, 2, 3, 4].map((i) => num(scores, `power_weak_${i}`));
+    const strongAvg = meanOfFour(strong);
+    const weakAvg = meanOfFour(weak);
+    const strongMax = maxOf(strong);
+    const weakMax = maxOf(weak);
+    metrics.shot_power_strong_avg = strongAvg;
+    metrics.shot_power_weak_avg = weakAvg;
+    metrics.shot_power_strong_max = strongMax;
+    metrics.shot_power_weak_max = weakMax;
+    metrics.shot_power_asymmetry_pct = safeAsymmetryPct(strongAvg, weakAvg);
+  }
+
+  // SERVE DISTANCE
+  if (testName === "Serve Distance") {
+    const strong = [1, 2, 3, 4].map((i) => num(scores, `serve_strong_${i}`));
+    const weak = [1, 2, 3, 4].map((i) => num(scores, `serve_weak_${i}`));
+    const strongAvg = meanOfFour(strong);
+    const weakAvg = meanOfFour(weak);
+    const strongMax = maxOf(strong);
+    const weakMax = maxOf(weak);
+    metrics.serve_distance_strong_avg = strongAvg;
+    metrics.serve_distance_weak_avg = weakAvg;
+    metrics.serve_distance_strong_max = strongMax;
+    metrics.serve_distance_weak_max = weakMax;
+    metrics.serve_distance_asymmetry_pct = safeAsymmetryPct(strongAvg, weakAvg);
+  }
+
+  // FIGURE 8
+  if (testName === "Figure 8 Loops") {
+    const strong = num(scores, "figure8_strong");
+    const weak = num(scores, "figure8_weak");
+    const both = num(scores, "figure8_both");
+    metrics.figure8_loops_strong = strong;
+    metrics.figure8_loops_weak = weak;
+    metrics.figure8_loops_both = both;
+    metrics.figure8_asymmetry_pct = safeAsymmetryPct(strong, weak);
+  }
+
+  // PASSING GATES
+  if (testName === "Passing Gates") {
+    const strong = num(scores, "passing_strong");
+    const weak = num(scores, "passing_weak");
+    const total = strong === null || weak === null ? null : strong + weak;
+    metrics.passing_gates_strong_hits = strong;
+    metrics.passing_gates_weak_hits = weak;
+    metrics.passing_gates_total_hits = total;
+    metrics.passing_gates_asymmetry_pct = safeAsymmetryPct(strong, weak);
+  }
+
+  // 1V1
+  if (testName === "1v1") {
+    const roundsRaw = (scores as { rounds?: unknown }).rounds;
+    const rounds = Array.isArray(roundsRaw)
+      ? roundsRaw.slice(0, 50).map((v) => toFiniteNumber(v))
+      : extractIndexedNumbers(scores, "onevone_round_").slice(0, 50);
+    metrics.one_v_one_avg_score = avgOfAll(rounds);
+    metrics.one_v_one_total_score = sumOfAll(rounds);
+    metrics.one_v_one_best_round = maxOfAll(rounds);
+    metrics.one_v_one_worst_round = minOfAll(rounds);
+    const best = maxOfAll(rounds);
+    const worst = minOfAll(rounds);
+    metrics.one_v_one_consistency_range =
+      best === null || worst === null ? null : best - worst;
+  }
+
+  // JUGGLING
+  if (testName === "Juggling") {
+    const attempts = [1, 2, 3, 4].map((i) => num(scores, `juggling_${i}`));
+    metrics.juggle_best = maxOfAll(attempts);
+    metrics.juggle_best2_sum = sumTop2OfFour(attempts);
+    metrics.juggle_avg_all = meanOfFour(attempts);
+    metrics.juggle_total = sumOfAll(attempts);
+    const maxV = maxOfAll(attempts);
+    const minV = minOfAll(attempts);
+    metrics.juggle_consistency_range =
+      maxV === null || minV === null ? null : maxV - minV;
+  }
+
+  // SKILL MOVES
+  if (testName === "Skill Moves") {
+    const movesRaw = (scores as { moves?: unknown }).moves;
+    const moves = Array.isArray(movesRaw)
+      ? movesRaw.slice(0, 50).map((m) => {
+          const obj = (m ?? {}) as Record<string, unknown>;
+          const score = toFiniteNumber(obj.score);
+          return score;
+        })
+      : [];
+    const ratings =
+      moves.length > 0 ? moves : extractIndexedNumbers(scores, "skillmove_").slice(0, 50);
+    metrics.skill_moves_avg_rating = avgOfAll(ratings);
+    metrics.skill_moves_total_rating = sumOfAll(ratings);
+    metrics.skill_moves_best_rating = maxOfAll(ratings);
+    metrics.skill_moves_worst_rating = minOfAll(ratings);
+    const best = maxOfAll(ratings);
+    const worst = minOfAll(ratings);
+    metrics.skill_moves_consistency_range =
+      best === null || worst === null ? null : best - worst;
+  }
+
+  // AGILITY
+  if (testName === "5-10-5 Agility") {
+    const trials = [1, 2, 3].map((i) => num(scores, `agility_${i}`));
+    metrics.agility_5_10_5_best_time = minOfAll(trials);
+    metrics.agility_5_10_5_avg_time = avgOfAll(trials);
+    metrics.agility_5_10_5_worst_time = maxOfAll(trials);
+    const best = minOfAll(trials);
+    const worst = maxOfAll(trials);
+    metrics.agility_5_10_5_consistency_range =
+      best === null || worst === null ? null : worst - best;
+  }
+
+  // REACTION SPRINT
+  if (testName === "Reaction Sprint") {
+    const reactionTimes = [1, 2, 3].map((i) => num(scores, `reaction_cue_${i}`));
+    const totalTimes = [1, 2, 3].map((i) => num(scores, `reaction_total_${i}`));
+    metrics.reaction_5m_reaction_time_avg = avgOfAll(reactionTimes);
+    metrics.reaction_5m_total_time_avg = avgOfAll(totalTimes);
+    metrics.reaction_5m_reaction_time_best = minOfAll(reactionTimes);
+    metrics.reaction_5m_total_time_best = minOfAll(totalTimes);
+    metrics.reaction_5m_reaction_time_worst = maxOfAll(reactionTimes);
+    metrics.reaction_5m_total_time_worst = maxOfAll(totalTimes);
+  }
+
+  // SINGLE-LEG HOP
+  if (testName === "Single-leg Hop") {
+    const left = [1, 2, 3].map((i) => num(scores, `hop_left_${i}`));
+    const right = [1, 2, 3].map((i) => num(scores, `hop_right_${i}`));
+    const leftMax = maxOfAll(left);
+    const rightMax = maxOfAll(right);
+    const hopMax =
+      leftMax === null || rightMax === null
+        ? null
+        : Math.max(leftMax, rightMax);
+    metrics.single_leg_hop_left = leftMax;
+    metrics.single_leg_hop_right = rightMax;
+    metrics.single_leg_hop_asymmetry_pct =
+      hopMax === null || hopMax === 0
+        ? null
+        : (Math.abs((leftMax ?? 0) - (rightMax ?? 0)) / hopMax) * 100;
+    metrics.single_leg_hop_left_avg = avgOfAll(left);
+    metrics.single_leg_hop_right_avg = avgOfAll(right);
+  }
+
+  // DOUBLE-LEG JUMPS
+  if (testName === "Double-leg Jumps") {
+    const c10 = num(scores, "jumps_10s");
+    const c20 = num(scores, "jumps_20s");
+    const c30 = num(scores, "jumps_30s");
+    const last10 = c30 === null || c20 === null ? null : c30 - c20;
+    const dropoffPct =
+      c10 === null || last10 === null || c10 === 0
+        ? null
+        : ((c10 - last10) / c10) * 100;
+    metrics.double_leg_jumps_first10 = c10;
+    metrics.double_leg_jumps_total_reps = c30;
+    metrics.double_leg_jumps_last10 = last10;
+    metrics.double_leg_jumps_dropoff_pct = dropoffPct;
+    metrics.double_leg_jumps_mid10 =
+      c20 === null || c10 === null ? null : c20 - c10;
+  }
+
+  // ANKLE DORSIFLEXION
+  if (testName === "Ankle Dorsiflexion") {
+    const leftIn = num(scores, "ankle_left");
+    const rightIn = num(scores, "ankle_right");
+    const leftCm = leftIn === null ? null : leftIn * 2.54;
+    const rightCm = rightIn === null ? null : rightIn * 2.54;
+    const avgCm =
+      leftCm === null || rightCm === null ? null : (leftCm + rightCm) / 2;
+    const ankleMax =
+      leftCm === null || rightCm === null ? null : Math.max(leftCm, rightCm);
+    metrics.ankle_dorsiflex_left_cm = leftCm;
+    metrics.ankle_dorsiflex_right_cm = rightCm;
+    metrics.ankle_dorsiflex_avg_cm = avgCm;
+    metrics.ankle_dorsiflex_asymmetry_pct =
+      ankleMax === null || ankleMax === 0
+        ? null
+        : (Math.abs((leftCm ?? 0) - (rightCm ?? 0)) / ankleMax) * 100;
+  }
+
+  // CORE PLANK
+  if (testName === "Core Plank") {
+    const hold = num(scores, "plank_time");
+    const formFlag = num(scores, "plank_form");
+    const goodForm =
+      hold === null || formFlag === null ? null : formFlag === 1 ? hold : 0;
+    metrics.core_plank_hold_sec = hold;
+    metrics.core_plank_form_flag = formFlag;
+    metrics.core_plank_hold_sec_if_good_form = goodForm;
+  }
+
+  return metrics;
+}
+
 function num(scores: Record<string, unknown>, key: string) {
   return toFiniteNumber(scores[key]);
 }
@@ -134,6 +338,105 @@ function extractIndexedNumbers(
 
   entries.sort((a, b) => a[0] - b[0]);
   return entries.map((e) => e[1]);
+}
+
+function computeTestProgressions(
+  byName: Map<string, PlayerTestRow[]>
+): PlayerProfileData["test_progressions"] {
+  const progressions: NonNullable<PlayerProfileData["test_progressions"]> = {};
+
+  for (const [testName, testList] of byName.entries()) {
+    if (testList.length === 0) continue;
+
+    // Sort by date ascending (oldest first)
+    const sorted = testList.slice().sort((a, b) => {
+      if (a.test_date < b.test_date) return -1;
+      if (a.test_date > b.test_date) return 1;
+      return a.created_at.localeCompare(b.created_at);
+    });
+
+    const firstTest = sorted[0];
+    const mostRecentTest = sorted[sorted.length - 1];
+    const previousTest = sorted.length > 1 ? sorted[sorted.length - 2] : null;
+
+    // Compute metrics for each test
+    const firstMetrics = computeMetricsForSingleTest(
+      testName,
+      firstTest.scores ?? {}
+    );
+    const mostRecentMetrics = computeMetricsForSingleTest(
+      testName,
+      mostRecentTest.scores ?? {}
+    );
+    const previousMetrics = previousTest
+      ? computeMetricsForSingleTest(testName, previousTest.scores ?? {})
+      : null;
+
+    // Compute timeline (all tests)
+    const timeline = sorted.map((t) => ({
+      test_date: t.test_date,
+      test_id: t.id,
+      metrics: computeMetricsForSingleTest(testName, t.scores ?? {}),
+    }));
+
+    // Compute changes
+    const since_first: Record<string, number | null> = {};
+    const pct_since_first: Record<string, number | null> = {};
+    const since_previous: Record<string, number | null> = {};
+    const pct_since_previous: Record<string, number | null> = {};
+
+    for (const key of Object.keys(mostRecentMetrics)) {
+      const current = mostRecentMetrics[key];
+      const first = firstMetrics[key];
+      const prev = previousMetrics?.[key] ?? null;
+
+      since_first[key] = delta(current, first);
+      pct_since_first[key] = pctChange(current, first);
+
+      if (previousMetrics) {
+        since_previous[key] = delta(current, prev);
+        pct_since_previous[key] = pctChange(current, prev);
+      }
+    }
+
+    // Calculate date range in days
+    const firstDate = new Date(firstTest.test_date);
+    const mostRecentDate = new Date(mostRecentTest.test_date);
+    const date_range_days = Math.round(
+      (mostRecentDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    progressions[testName] = {
+      first_test: {
+        test_date: firstTest.test_date,
+        test_id: firstTest.id,
+        metrics: firstMetrics,
+      },
+      most_recent_test: {
+        test_date: mostRecentTest.test_date,
+        test_id: mostRecentTest.id,
+        metrics: mostRecentMetrics,
+      },
+      previous_test: previousTest
+        ? {
+            test_date: previousTest.test_date,
+            test_id: previousTest.id,
+            metrics: previousMetrics!,
+          }
+        : undefined,
+      changes: {
+        since_first,
+        pct_since_first,
+        since_previous: previousMetrics ? since_previous : undefined,
+        pct_since_previous: previousMetrics ? pct_since_previous : undefined,
+      },
+      test_count: sorted.length,
+      date_range_days,
+      timeline,
+    };
+  }
+
+  return progressions;
 }
 
 export type PlayerProfileData = {
@@ -157,6 +460,39 @@ export type PlayerProfileData = {
     deltas: Record<string, number | null>;
     pct_changes: Record<string, number | null>;
   };
+  test_progressions?: Record<
+    string,
+    {
+      first_test: {
+        test_date: string;
+        test_id: string;
+        metrics: Record<string, number | null>;
+      };
+      most_recent_test: {
+        test_date: string;
+        test_id: string;
+        metrics: Record<string, number | null>;
+      };
+      previous_test?: {
+        test_date: string;
+        test_id: string;
+        metrics: Record<string, number | null>;
+      };
+      changes: {
+        since_first: Record<string, number | null>;
+        since_previous?: Record<string, number | null>;
+        pct_since_first: Record<string, number | null>;
+        pct_since_previous?: Record<string, number | null>;
+      };
+      test_count: number;
+      date_range_days: number;
+      timeline: Array<{
+        test_date: string;
+        test_id: string;
+        metrics: Record<string, number | null>;
+      }>;
+    }
+  >;
 };
 
 export function computePlayerProfile(args: {
@@ -526,6 +862,9 @@ export function computePlayerProfile(args: {
       .map((t) => ({ id: t.id, test_date: t.test_date })),
   })) as unknown as Json;
 
+  // Compute test progressions (first → latest, with timeline)
+  const test_progressions = computeTestProgressions(byName);
+
   return {
     version: 1,
     computed_at: args.nowIso,
@@ -542,5 +881,6 @@ export function computePlayerProfile(args: {
     inputs,
     metrics,
     comparisons,
+    test_progressions,
   };
 }

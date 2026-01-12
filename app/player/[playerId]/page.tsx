@@ -9,6 +9,7 @@ import { SignOutButton } from "@/app/ui/SignOutButton";
 import { PlayerEditor } from "@/app/player/[playerId]/ui/PlayerEditor";
 import { PlayerInsights } from "@/app/player/[playerId]/ui/PlayerInsights";
 import { PlayerGoals } from "@/app/player/[playerId]/ui/PlayerGoals";
+import { PlayerSessions } from "@/app/player/[playerId]/ui/PlayerSessions";
 
 type PlayerRow = {
   id: string;
@@ -108,6 +109,9 @@ export default async function PlayerPage(props: {
             <div className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
               <PlayerEditor player={player} />
             </div>
+
+            <PlayerSessions playerId={player.id} />
+
             <div className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
               <PlayerInsights playerId={player.id} />
             </div>
