@@ -201,6 +201,7 @@ export default function AdminPlayerClient(props: {
     Array.from({ length: 5 }, () => "")
   );
   const [skillMovesCount, setSkillMovesCount] = useState<number>(6);
+  const [skillMovesMinCount, setSkillMovesMinCount] = useState<number>(1);
   const [skillMoves, setSkillMoves] = useState<
     Array<{ name: string; score: string }>
   >(
@@ -1627,13 +1628,85 @@ export default function AdminPlayerClient(props: {
                           setOneVOneRounds(Array.from({ length: 5 }, () => ""));
                         }
                         if (next === "Skill Moves") {
-                          setSkillMovesCount(6);
-                          setSkillMoves(
-                            Array.from({ length: 6 }, (_, i) => ({
-                              name: `Move ${i + 1}`,
-                              score: "",
-                            }))
-                          );
+                          // Collect ALL unique move names and their most recent scores
+                          const allSkillMovesTests = tests
+                            .filter((t) => t.test_name === "Skill Moves")
+                            .sort((a, b) => {
+                              if (a.test_date !== b.test_date) {
+                                return b.test_date.localeCompare(a.test_date);
+                              }
+                              return b.created_at.localeCompare(a.created_at);
+                            });
+
+                          if (allSkillMovesTests.length > 0) {
+                            // Build a map of move name -> most recent score
+                            const moveScoresMap = new Map<string, string>();
+
+                            // Process tests from newest to oldest, so earlier iterations set the most recent scores
+                            for (const test of allSkillMovesTests) {
+                              const scores = test.scores ?? {};
+                              const movesRaw = (scores as { moves?: unknown }).moves;
+
+                              if (Array.isArray(movesRaw)) {
+                                movesRaw.forEach((m) => {
+                                  const obj = (m ?? {}) as Record<string, unknown>;
+                                  const name = String(obj.name ?? "").trim();
+                                  if (name && !moveScoresMap.has(name)) {
+                                    // First time seeing this move (most recent)
+                                    const score = obj.score === null || obj.score === undefined
+                                      ? ""
+                                      : String(obj.score);
+                                    moveScoresMap.set(name, score);
+                                  }
+                                });
+                              } else {
+                                // Legacy format
+                                Object.entries(scores).forEach(([k, v]) => {
+                                  const m = /^skillmove_name_(\d+)$/.exec(k);
+                                  if (m) {
+                                    const name = String(v ?? "").trim();
+                                    if (name && !moveScoresMap.has(name)) {
+                                      const idx = Number(m[1]);
+                                      const scoreKey = `skillmove_${idx}`;
+                                      const score = scores[scoreKey] === null || scores[scoreKey] === undefined
+                                        ? ""
+                                        : String(scores[scoreKey]);
+                                      moveScoresMap.set(name, score);
+                                    }
+                                  }
+                                });
+                              }
+                            }
+
+                            // Convert to array
+                            const movesWithScores = Array.from(moveScoresMap.entries()).map(([name, score]) => ({
+                              name,
+                              score,
+                            }));
+
+                            const minCount = movesWithScores.length; // Can't have fewer than existing moves
+                            const count = Math.max(6, movesWithScores.length + 2);
+
+                            setSkillMovesMinCount(minCount);
+                            setSkillMovesCount(count);
+                            setSkillMoves([
+                              ...movesWithScores,
+                              ...Array.from({ length: count - movesWithScores.length }, (_, i) => ({
+                                name: `Move ${movesWithScores.length + i + 1}`,
+                                score: "",
+                              })),
+                            ]);
+                          } else {
+                            // No previous test - use default blank moves
+                            setSkillMovesMinCount(1);
+                            setSkillMovesCount(6);
+                            setSkillMoves(
+                              Array.from({ length: 6 }, (_, i) => ({
+                                name: `Move ${i + 1}`,
+                                score: "",
+                              }))
+                            );
+                          }
                         }
                       }}
                       className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
@@ -1710,15 +1783,10 @@ export default function AdminPlayerClient(props: {
                             <div className="text-sm text-gray-700">
                               Number of moves
                             </div>
-                            <input
+                            <select
                               value={String(skillMovesCount)}
                               onChange={(e) => {
-                                const next = clampCount(
-                                  e.target.value,
-                                  1,
-                                  50,
-                                  6
-                                );
+                                const next = Number(e.target.value);
                                 setSkillMovesCount(next);
                                 setSkillMoves((prev) =>
                                   resizeArray(prev, next, (i) => ({
@@ -1727,9 +1795,14 @@ export default function AdminPlayerClient(props: {
                                   }))
                                 );
                               }}
-                              inputMode="numeric"
                               className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                            />
+                            >
+                              {Array.from({ length: 51 - skillMovesMinCount }, (_, i) => skillMovesMinCount + i).map((num) => (
+                                <option key={num} value={num}>
+                                  {num}
+                                </option>
+                              ))}
+                            </select>
                           </div>
 
                           {skillMoves.map((m, i) => (
@@ -2066,15 +2139,10 @@ export default function AdminPlayerClient(props: {
                                           <div className="text-sm text-gray-700">
                                             Number of moves
                                           </div>
-                                          <input
+                                          <select
                                             value={String(editSkillMovesCount)}
                                             onChange={(e) => {
-                                              const next = clampCount(
-                                                e.target.value,
-                                                1,
-                                                50,
-                                                6
-                                              );
+                                              const next = Number(e.target.value);
                                               setEditSkillMovesCount(next);
                                               setEditSkillMoves((prev) =>
                                                 resizeArray(
@@ -2087,9 +2155,14 @@ export default function AdminPlayerClient(props: {
                                                 )
                                               );
                                             }}
-                                            inputMode="numeric"
                                             className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                                          />
+                                          >
+                                            {Array.from({ length: 50 }, (_, i) => i + 1).map((num) => (
+                                              <option key={num} value={num}>
+                                                {num}
+                                              </option>
+                                            ))}
+                                          </select>
                                         </div>
                                         {editSkillMoves.map((m, i) => (
                                           <div
