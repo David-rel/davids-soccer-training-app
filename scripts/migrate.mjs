@@ -4,7 +4,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import dotenv from "dotenv";
-import { Client } from "@neondatabase/serverless";
+import { Client, neonConfig } from "@neondatabase/serverless";
+import ws from "ws";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,6 +70,8 @@ async function applyOne(client, filename) {
 }
 
 async function main() {
+  // Neon serverless needs a WebSocket implementation when running in Node.
+  neonConfig.webSocketConstructor = ws;
   const client = new Client({ connectionString: getDbUrl() });
   await client.connect();
 

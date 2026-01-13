@@ -10,6 +10,7 @@ import { PlayerEditor } from "@/app/player/[playerId]/ui/PlayerEditor";
 import { PlayerInsights } from "@/app/player/[playerId]/ui/PlayerInsights";
 import { PlayerGoals } from "@/app/player/[playerId]/ui/PlayerGoals";
 import { PlayerSessions } from "@/app/player/[playerId]/ui/PlayerSessions";
+import { PlayerVideos } from "@/app/player/[playerId]/ui/PlayerVideos";
 
 type PlayerRow = {
   id: string;
@@ -155,6 +156,8 @@ export default async function PlayerPage(props: {
             </div>
 
             <PlayerGoals playerId={player.id} />
+
+            <PlayerVideos playerId={player.id} />
 
             <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-sm text-gray-700 shadow-sm">
               Player profiles are created by Coach David. Parents can edit basic

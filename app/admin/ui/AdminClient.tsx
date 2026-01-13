@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AdminVideos } from "@/app/admin/ui/AdminVideos";
 
 type Parent = {
   id: string;
@@ -648,6 +649,13 @@ export default function AdminClient() {
                 )}
               </div>
             </section>
+          </div>
+        )}
+
+        {/* Video Management Section */}
+        {authorized && (
+          <div className="mt-6">
+            <AdminVideos securityCode={securityCode} />
           </div>
         )}
       </main>
