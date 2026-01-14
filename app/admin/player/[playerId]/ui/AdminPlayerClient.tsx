@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { TEST_DEFINITIONS } from "@/lib/testDefinitions";
+import { PinnedVideos } from "./PinnedVideos";
 
 type Player = {
   id: string;
@@ -253,6 +254,8 @@ export default function AdminPlayerClient(props: {
       securityCode: code,
     });
     setAuthorized(true);
+    // Store in localStorage so child components can access it
+    localStorage.setItem("adminSecurityCode", code);
   }
 
   async function loadPlayer(code: string, id: string) {
@@ -687,6 +690,7 @@ export default function AdminPlayerClient(props: {
                   setSecurityCode("");
                   setPlayer(null);
                   setDraft(null);
+                  localStorage.removeItem("adminSecurityCode");
                 }}
                 className="rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-gray-800"
               >
@@ -1600,6 +1604,10 @@ export default function AdminPlayerClient(props: {
                 >
                   {isPending ? "Saving…" : "Save changes"}
                 </button>
+              </div>
+
+              <div className="mt-8">
+                <PinnedVideos playerId={playerId ?? ""} />
               </div>
             </section>
 

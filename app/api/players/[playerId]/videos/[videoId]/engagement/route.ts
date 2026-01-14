@@ -40,26 +40,33 @@ export async function POST(
   const body = (await req.json().catch(() => null)) as {
     action?: string;
     rating?: number;
+    position?: number; // Playback position in seconds
+    totalTime?: number; // Total watch time in seconds
   } | null;
 
   if (!body || !body.action) {
     return new Response("Missing action parameter", { status: 400 });
   }
 
-  const { action, rating } = body;
+  const { action, rating, position, totalTime } = body;
   const now = new Date().toISOString();
 
   try {
     // 3. Handle different engagement actions
     if (action === "watch") {
-      // Mark video as watched, increment watch count
+      // Mark video as watched, increment watch count, track progress
+      // Default to position 1 (not 0) so video appears in continue watching
+      const defaultPosition = position !== undefined ? position : 1;
+
       await sql`
         INSERT INTO video_engagement (
           player_id, video_id, watched, watch_count,
-          first_watched_at, last_watched_at
+          first_watched_at, last_watched_at, started_at,
+          last_position_seconds, total_watch_time_seconds
         )
         VALUES (
-          ${playerId}, ${videoId}, true, 1, ${now}, ${now}
+          ${playerId}, ${videoId}, true, 1, ${now}, ${now}, ${now},
+          ${defaultPosition}, ${totalTime || 0}
         )
         ON CONFLICT (player_id, video_id)
         DO UPDATE SET
@@ -67,10 +74,37 @@ export async function POST(
           watch_count = video_engagement.watch_count + 1,
           last_watched_at = ${now},
           first_watched_at = COALESCE(video_engagement.first_watched_at, ${now}),
+          started_at = COALESCE(video_engagement.started_at, ${now}),
+          last_position_seconds = CASE
+            WHEN video_engagement.last_position_seconds = 0 THEN ${defaultPosition}
+            ELSE COALESCE(${position}, video_engagement.last_position_seconds)
+          END,
+          total_watch_time_seconds = COALESCE(${totalTime}, video_engagement.total_watch_time_seconds),
           updated_at = ${now}
       `;
 
       return Response.json({ success: true, action: "watch" });
+    } else if (action === "progress") {
+      // Update watch progress (for continue watching feature)
+      await sql`
+        INSERT INTO video_engagement (
+          player_id, video_id, watched, watch_count,
+          started_at, last_watched_at,
+          last_position_seconds, total_watch_time_seconds
+        )
+        VALUES (
+          ${playerId}, ${videoId}, true, 1, ${now}, ${now},
+          ${position || 0}, ${totalTime || 0}
+        )
+        ON CONFLICT (player_id, video_id)
+        DO UPDATE SET
+          last_position_seconds = ${position || 0},
+          total_watch_time_seconds = ${totalTime || 0},
+          last_watched_at = ${now},
+          updated_at = ${now}
+      `;
+
+      return Response.json({ success: true, action: "progress" });
     } else if (action === "complete") {
       // Mark as completed (implies watched)
       await sql`
@@ -100,22 +134,21 @@ export async function POST(
 
       await sql`
         INSERT INTO video_engagement (
-          player_id, video_id, rating, rated_at
+          player_id, video_id, rating_stars
         )
         VALUES (
-          ${playerId}, ${videoId}, ${rating}, ${now}
+          ${playerId}, ${videoId}, ${rating}
         )
         ON CONFLICT (player_id, video_id)
         DO UPDATE SET
-          rating = ${rating},
-          rated_at = ${now},
+          rating_stars = ${rating},
           updated_at = ${now}
       `;
 
       return Response.json({ success: true, action: "rate", rating });
     } else {
       return new Response(
-        "Invalid action. Must be 'watch', 'complete', or 'rate'",
+        "Invalid action. Must be 'watch', 'complete', 'rate', or 'progress'",
         { status: 400 }
       );
     }

@@ -55,7 +55,7 @@ export async function GET(
 
   try {
     // 2. Fetch data in parallel for performance
-    const [videos, profiles, engagements] = await Promise.all([
+    const [videos, profiles, engagements, pinnedVideos] = await Promise.all([
       // Get all published videos
       sql`
         SELECT id, title, description, video_url, category,
@@ -76,15 +76,23 @@ export async function GET(
 
       // Get all engagement records for this player
       sql`
-        SELECT video_id, watched, completed, rating,
+        SELECT video_id, watched, completed, rating_stars as rating,
                watch_count, last_watched_at
         FROM video_engagement
         WHERE player_id = ${playerId}
       ` as unknown as Promise<VideoEngagementRow[]>,
+
+      // Get coach-pinned videos
+      sql`
+        SELECT cvp.video_id, cvp.priority, cvp.note
+        FROM coach_video_pins cvp
+        WHERE cvp.player_id = ${playerId}
+        ORDER BY cvp.priority DESC
+      ` as unknown as Promise<Array<{ video_id: string; priority: number; note: string | null }>>,
     ]);
 
     // 3. Compute recommendations using core algorithm
-    const recommendations = computeRecommendations({
+    let recommendations = computeRecommendations({
       videos,
       playerProfile: profiles[0]?.data || null,
       engagements,
@@ -95,9 +103,36 @@ export async function GET(
       },
     });
 
+    // 4. Move coach-pinned videos to the top (preserving their priority order)
+    if (pinnedVideos.length > 0) {
+      const pinnedVideoIds = new Set(pinnedVideos.map(p => p.video_id));
+      const pinned = recommendations.filter(r => pinnedVideoIds.has(r.video.id));
+      const notPinned = recommendations.filter(r => !pinnedVideoIds.has(r.video.id));
+
+      // Sort pinned by coach's priority
+      pinned.sort((a, b) => {
+        const priorityA = pinnedVideos.find(p => p.video_id === a.video.id)?.priority || 0;
+        const priorityB = pinnedVideos.find(p => p.video_id === b.video.id)?.priority || 0;
+        return priorityB - priorityA;
+      });
+
+      // Add "Coach Recommended" reason to pinned videos
+      pinned.forEach(p => {
+        const pin = pinnedVideos.find(pv => pv.video_id === p.video.id);
+        p.reason = pin?.note || "Coach Recommended";
+      });
+
+      recommendations = [...pinned, ...notPinned];
+
+      // Re-assign ranks
+      recommendations.forEach((r, index) => {
+        r.rank = index + 1;
+      });
+    }
+
     const computeTime = Date.now() - startTime;
 
-    // 4. Return ranked recommendations with metadata
+    // 5. Return ranked recommendations with metadata
     return Response.json({
       recommendations,
       metadata: {
@@ -105,6 +140,7 @@ export async function GET(
         has_profile: !!profiles[0],
         profile_computed_at: profiles[0]?.computed_at || null,
         engagement_count: engagements.length,
+        pinned_count: pinnedVideos.length,
         compute_time_ms: computeTime,
       },
     });

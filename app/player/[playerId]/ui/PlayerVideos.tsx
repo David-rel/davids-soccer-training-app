@@ -35,12 +35,21 @@ type RecommendationResponse = {
   };
 };
 
-type ViewMode = "recommendations" | "browse";
+type ContinueWatchingVideo = Video & {
+  last_position_seconds: number;
+  total_watch_time_seconds: number;
+  last_watched_at: string;
+  watch_count: number;
+  rating_stars: number | null;
+};
+
+type ViewMode = "recommendations" | "browse" | "continue";
 
 export function PlayerVideos({ playerId }: { playerId: string }) {
   const [viewMode, setViewMode] = useState<ViewMode>("recommendations");
   const [videos, setVideos] = useState<Video[]>([]);
   const [recommendations, setRecommendations] = useState<ScoredVideo[]>([]);
+  const [continueWatching, setContinueWatching] = useState<ContinueWatchingVideo[]>([]);
   const [recommendationMetadata, setRecommendationMetadata] = useState<RecommendationResponse["metadata"] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -97,9 +106,31 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
     }
   }
 
+  async function loadContinueWatching() {
+    try {
+      setError(null);
+      setLoading(true);
+      const res = await fetch(`/api/players/${playerId}/videos/continue-watching`, {
+        cache: "no-store"
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load continue watching: ${res.status}`);
+      }
+      const data = await res.json();
+      setContinueWatching(data.videos ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load continue watching");
+      console.error("Error loading continue watching:", e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (viewMode === "recommendations") {
       loadRecommendations();
+    } else if (viewMode === "continue") {
+      loadContinueWatching();
     } else {
       loadVideos();
     }
@@ -129,12 +160,18 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
   }
 
   // Calculate pagination
-  const displayItems = viewMode === "recommendations" ? recommendations : videos;
+  const displayItems = viewMode === "recommendations"
+    ? recommendations
+    : viewMode === "continue"
+    ? continueWatching
+    : videos;
   const totalPages = Math.ceil(displayItems.length / VIDEOS_PER_PAGE);
   const startIndex = currentPage * VIDEOS_PER_PAGE;
   const endIndex = startIndex + VIDEOS_PER_PAGE;
   const currentVideos = viewMode === "recommendations"
     ? recommendations.slice(startIndex, endIndex)
+    : viewMode === "continue"
+    ? continueWatching.slice(startIndex, endIndex)
     : videos.slice(startIndex, endIndex);
 
   const handleNextPage = () => {
@@ -200,6 +237,8 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
           <p className="mt-1 text-xs text-gray-600">
             {viewMode === "recommendations"
               ? "Personalized videos based on your test scores."
+              : viewMode === "continue"
+              ? "Pick up where you left off."
               : "Browse all videos by category."}
           </p>
         </div>
@@ -212,12 +251,12 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
         </button>
       </div>
 
-      {/* View Mode Toggle */}
+      {/* View Mode Toggle - 3 tabs */}
       <div className="mt-4 flex gap-2">
         <button
           type="button"
           onClick={() => setViewMode("recommendations")}
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+          className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${
             viewMode === "recommendations"
               ? "bg-emerald-600 text-white"
               : "border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
@@ -227,8 +266,19 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
         </button>
         <button
           type="button"
+          onClick={() => setViewMode("continue")}
+          className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+            viewMode === "continue"
+              ? "bg-emerald-600 text-white"
+              : "border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+          }`}
+        >
+          Continue
+        </button>
+        <button
+          type="button"
           onClick={() => setViewMode("browse")}
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+          className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${
             viewMode === "browse"
               ? "bg-emerald-600 text-white"
               : "border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
@@ -264,7 +314,7 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
       {viewMode === "recommendations" && recommendationMetadata && (
         <div className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
           {recommendationMetadata.has_profile
-            ? `Showing ${recommendations.length} videos ranked by your test results (computed in ${recommendationMetadata.compute_time_ms}ms)`
+            ? `Showing ${recommendations.length} videos ranked by your test results`
             : "Complete some tests to get personalized recommendations!"}
         </div>
       )}
@@ -380,10 +430,37 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
                       {/* Video Card */}
                       <VideoCard
                         video={scoredVideo.video}
+                        playerId={playerId}
                         onWatch={() => handleVideoEngagement(scoredVideo.video.id, "watch")}
                         onComplete={() => handleVideoEngagement(scoredVideo.video.id, "complete")}
                       />
                     </div>
+                  );
+                })
+              : viewMode === "continue"
+              ? currentVideos.map((item) => {
+                  const cwVideo = item as ContinueWatchingVideo;
+                  // Calculate progress percentage (assuming duration is in format like "10:23")
+                  const durationParts = cwVideo.duration?.split(':') || [];
+                  const totalSeconds = durationParts.length === 2
+                    ? parseInt(durationParts[0]) * 60 + parseInt(durationParts[1])
+                    : 0;
+                  const progressPercent = totalSeconds > 0
+                    ? (cwVideo.last_position_seconds / totalSeconds) * 100
+                    : 0;
+
+                  return (
+                    <VideoCard
+                      key={cwVideo.id}
+                      video={cwVideo}
+                      playerId={playerId}
+                      currentRating={cwVideo.rating_stars}
+                      showProgress={true}
+                      progressPercent={progressPercent}
+                      lastPosition={cwVideo.last_position_seconds}
+                      onWatch={() => handleVideoEngagement(cwVideo.id, "watch")}
+                      onComplete={() => handleVideoEngagement(cwVideo.id, "complete")}
+                    />
                   );
                 })
               : currentVideos.map((item) => {
@@ -392,6 +469,7 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
                     <VideoCard
                       key={video.id}
                       video={video}
+                      playerId={playerId}
                       onWatch={() => handleVideoEngagement(video.id, "watch")}
                       onComplete={() => handleVideoEngagement(video.id, "complete")}
                     />

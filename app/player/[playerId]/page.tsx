@@ -11,6 +11,7 @@ import { PlayerInsights } from "@/app/player/[playerId]/ui/PlayerInsights";
 import { PlayerGoals } from "@/app/player/[playerId]/ui/PlayerGoals";
 import { PlayerSessions } from "@/app/player/[playerId]/ui/PlayerSessions";
 import { PlayerVideos } from "@/app/player/[playerId]/ui/PlayerVideos";
+import { PinnedVideosByCoach } from "@/app/player/[playerId]/ui/PinnedVideosByCoach";
 
 type PlayerRow = {
   id: string;
@@ -156,6 +157,8 @@ export default async function PlayerPage(props: {
             </div>
 
             <PlayerGoals playerId={player.id} />
+
+            <PinnedVideosByCoach playerId={player.id} />
 
             <PlayerVideos playerId={player.id} />
 

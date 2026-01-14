@@ -302,7 +302,7 @@ function computeCategoryRelevance(
 
     relevances.push({
       category,
-      relevanceScore: Math.min(100, relevanceScore),
+      relevanceScore, // Don't cap at 100 - let normalization handle the range
       contributingWeaknesses: weaknessList,
     });
   }
@@ -333,19 +333,19 @@ function computeEngagementScore(
   video: VideoRow,
   engagement: VideoEngagementRow | null
 ): number {
-  // No engagement = highest discovery score
-  if (!engagement) return 100;
+  // No engagement = medium discovery score (changed from 100 to allow test scores to differentiate)
+  if (!engagement) return 50;
 
   // Already completed = lowest score (don't recommend again)
   if (engagement.completed) return 0;
 
-  // Watched but not completed = medium-low score
+  // Watched but not completed = low-medium score
   if (engagement.watched) return 30;
 
   // Has rating but not watched (edge case) = medium score
-  if (engagement.rating) return 50;
+  if (engagement.rating) return 40;
 
-  return 100; // Default to high discovery score
+  return 50; // Default to medium discovery score
 }
 
 /**
@@ -388,15 +388,19 @@ function handleNewPlayer(
         video,
         engagementMap.get(video.id) || null
       ),
-      finalScore: 50 * 0.7 + computeEngagementScore(video, engagementMap.get(video.id) || null) * 0.3,
+      finalScore: 50, // Test score as primary
       rank: 0,
       reason: "Foundational training video",
     }))
-    .sort(
-      (a, b) =>
-        (a.video.category || "").localeCompare(b.video.category || "") ||
-        a.video.created_at.localeCompare(b.video.created_at)
-    )
+    .sort((a, b) => {
+      // Sort by category first, then by engagement, then by date
+      const catCompare = (a.video.category || "").localeCompare(b.video.category || "");
+      if (catCompare !== 0) return catCompare;
+      if (a.engagementScore !== b.engagementScore) {
+        return b.engagementScore - a.engagementScore;
+      }
+      return a.video.created_at.localeCompare(b.video.created_at);
+    })
     .map((item, index) => ({ ...item, rank: index + 1 }));
 }
 
@@ -409,7 +413,7 @@ function handleAdvancedPlayer(
   engagementMap: Map<string, VideoEngagementRow>
 ): ScoredVideo[] {
   // Find categories where player excels
-  const categoryStrengths = new Map<string, number>();
+  const categoryStrengths = new Map<string, { scores: number[]; avgScore: number }>();
 
   for (const [testName, config] of Object.entries(TEST_TO_CATEGORY_MAPPING)) {
     for (const metricKey of config.metricKeys) {
@@ -434,33 +438,71 @@ function handleAdvancedPlayer(
       // If above 70th percentile, it's a strength
       if (strengthScore >= 70) {
         for (const category of config.categories) {
-          const current = categoryStrengths.get(category) || 0;
-          categoryStrengths.set(category, Math.max(current, strengthScore));
+          const current = categoryStrengths.get(category) || { scores: [], avgScore: 0 };
+          current.scores.push(strengthScore);
+          current.avgScore = current.scores.reduce((a, b) => a + b, 0) / current.scores.length;
+          categoryStrengths.set(category, current);
         }
       }
     }
   }
 
-  // Score videos based on strength categories
-  return videos
-    .map((video) => ({
-      video,
-      testAlignmentScore: categoryStrengths.get(video.category || "") || 50,
-      engagementScore: computeEngagementScore(
+  // Calculate max and min strength scores for normalization
+  let maxStrength = 0;
+  let minStrength = 100;
+  for (const strengthData of categoryStrengths.values()) {
+    maxStrength = Math.max(maxStrength, strengthData.avgScore);
+    minStrength = Math.min(minStrength, strengthData.avgScore);
+  }
+
+
+  // Score videos based on strength categories with better differentiation
+  const scoredVideos = videos
+    .map((video) => {
+      const strengthData = categoryStrengths.get(video.category || "");
+      let testAlignmentScore: number;
+
+      if (strengthData) {
+        // Normalize strength scores to 50-100 range for better differentiation
+        // This prevents all scores from clustering at the top
+        const range = maxStrength - minStrength;
+        if (range > 0) {
+          const normalized = ((strengthData.avgScore - minStrength) / range) * 50 + 50;
+          testAlignmentScore = Math.round(normalized);
+        } else {
+          testAlignmentScore = 75; // If all strengths are equal, use middle-high value
+        }
+      } else {
+        // Use much lower baseline for non-strength categories to create clear separation
+        testAlignmentScore = 20;
+      }
+
+      const engScore = computeEngagementScore(
         video,
         engagementMap.get(video.id) || null
-      ),
-      finalScore: 0,
-      rank: 0,
-      reason: "Advanced training for your strengths",
-    }))
-    .map((item) => ({
-      ...item,
-      finalScore:
-        item.testAlignmentScore * 0.7 + item.engagementScore * 0.3,
-    }))
-    .sort((a, b) => b.finalScore - a.finalScore)
+      );
+
+      return {
+        video,
+        testAlignmentScore,
+        engagementScore: engScore,
+        finalScore: testAlignmentScore, // Use test score as primary ranking factor
+        rank: 0,
+        reason: strengthData
+          ? "Advanced training for your strengths"
+          : "General skills development",
+      };
+    })
+    .sort((a, b) => {
+      // Sort by test score first, engagement as tiebreaker
+      if (a.testAlignmentScore !== b.testAlignmentScore) {
+        return b.testAlignmentScore - a.testAlignmentScore;
+      }
+      return b.engagementScore - a.engagementScore;
+    })
     .map((item, index) => ({ ...item, rank: index + 1 }));
+
+  return scoredVideos;
 }
 
 // ============================================================================
@@ -500,20 +542,40 @@ export function computeRecommendations(args: {
   // Compute category relevance from weaknesses
   const categoryRelevances = computeCategoryRelevance(weaknesses);
 
+  // Normalize relevance scores to create better differentiation
+  const relevanceScores = categoryRelevances.map(r => r.relevanceScore);
+  const maxRelevance = Math.max(...relevanceScores);
+  const minRelevance = Math.min(...relevanceScores);
+  const relevanceRange = maxRelevance - minRelevance;
+
   // Score each video
   const scoredVideos: ScoredVideo[] = videos.map((video) => {
-    const testScore = computeTestAlignmentScore(video, categoryRelevances);
+    const relevance = categoryRelevances.find(
+      (r) => r.category === video.category
+    );
+
+    let testScore: number;
+    if (relevance) {
+      // Normalize weakness-based scores to 50-100 range for differentiation
+      if (relevanceRange > 0) {
+        testScore = Math.round(((relevance.relevanceScore - minRelevance) / relevanceRange) * 50 + 50);
+      } else {
+        // All weaknesses have same severity
+        testScore = 75;
+      }
+    } else {
+      // Non-weakness categories get low baseline (similar to advanced player path)
+      testScore = 20;
+    }
+
     const engScore = computeEngagementScore(
       video,
       engagementMap.get(video.id) || null
     );
 
-    const finalScore =
-      testScore * options.testWeight + engScore * options.engagementWeight;
-
-    const relevance = categoryRelevances.find(
-      (r) => r.category === video.category
-    );
+    // Use test score as the primary ranking factor
+    // Engagement is only used to break ties within the same test score
+    const finalScore = testScore;
     const reason = generateReason(video, testScore, engScore, relevance);
 
     return {
@@ -529,8 +591,14 @@ export function computeRecommendations(args: {
     };
   });
 
-  // Sort by final score (descending)
-  scoredVideos.sort((a, b) => b.finalScore - a.finalScore);
+  // Sort by test score first (primary), then by engagement score (tiebreaker for unwatched vs watched)
+  scoredVideos.sort((a, b) => {
+    if (a.testAlignmentScore !== b.testAlignmentScore) {
+      return b.testAlignmentScore - a.testAlignmentScore;
+    }
+    // Within same test score, prioritize unwatched (higher engagement score)
+    return b.engagementScore - a.engagementScore;
+  });
 
   // Assign ranks
   scoredVideos.forEach((sv, index) => {

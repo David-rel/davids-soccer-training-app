@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { VideoCard } from "@/app/ui/VideoCard";
 
 type Video = {
@@ -175,13 +176,21 @@ export function AdminVideos({ securityCode }: { securityCode: string }) {
             Manage training videos and review parent recommendations.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
-        >
-          {showAddForm ? "Cancel" : "Add Video"}
-        </button>
+        <div className="flex gap-2">
+          <Link
+            href="/admin/video-reports"
+            className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+          >
+            Video Reports
+          </Link>
+          <button
+            type="button"
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+          >
+            {showAddForm ? "Cancel" : "Add Video"}
+          </button>
+        </div>
       </div>
 
       {/* Add Video Form */}
