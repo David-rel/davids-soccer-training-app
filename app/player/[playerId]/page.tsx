@@ -12,6 +12,7 @@ import { PlayerGoals } from "@/app/player/[playerId]/ui/PlayerGoals";
 import { PlayerSessions } from "@/app/player/[playerId]/ui/PlayerSessions";
 import { PlayerVideos } from "@/app/player/[playerId]/ui/PlayerVideos";
 import { PinnedVideosByCoach } from "@/app/player/[playerId]/ui/PinnedVideosByCoach";
+import { ChatWrapper } from "@/app/player/[playerId]/ui/ChatWrapper";
 
 type PlayerRow = {
   id: string;
@@ -169,6 +170,8 @@ export default async function PlayerPage(props: {
           </aside>
         </div>
       </main>
+
+      <ChatWrapper playerId={player.id} playerName={player.name} />
     </div>
   );
 }
