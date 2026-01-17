@@ -9,6 +9,7 @@ type PlayerGoal = {
   due_date: string | null; // YYYY-MM-DD
   completed: boolean;
   completed_at: string | null;
+  set_by: 'parent' | 'coach';
   created_at: string;
   updated_at: string;
 };
@@ -150,6 +151,11 @@ export function PlayerGoals({ playerId }: { playerId: string }) {
                   return;
                 }
                 const due = newGoalDueDate.trim();
+                // Validate date format if provided
+                if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+                  setErrMsg("Date must be in YYYY-MM-DD format.");
+                  return;
+                }
                 await jsonFetch<{ goal: PlayerGoal }>(
                   `/api/players/${playerId}/goals`,
                   {
@@ -220,96 +226,115 @@ export function PlayerGoals({ playerId }: { playerId: string }) {
                           className="mt-1 h-4 w-4 accent-emerald-600"
                         />
                         <div className="min-w-[220px] flex-1">
-                          <input
-                            value={d.name}
-                            onChange={(e) =>
-                              setGoalDrafts((prev) => ({
-                                ...prev,
-                                [g.id]: { ...d, name: e.target.value },
-                              }))
-                            }
-                            className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                          />
-                          <div className="mt-2">
+                          <div className="mb-2">
                             <input
-                              value={d.due_date}
+                              value={g.set_by === 'coach' ? g.name : d.name}
                               onChange={(e) =>
+                                g.set_by !== 'coach' &&
+                                setGoalDrafts((prev) => ({
+                                  ...prev,
+                                  [g.id]: { ...d, name: e.target.value },
+                                }))
+                              }
+                              disabled={g.set_by === 'coach'}
+                              readOnly={g.set_by === 'coach'}
+                              className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50 disabled:bg-gray-50 disabled:text-gray-600 disabled:cursor-not-allowed"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              value={g.set_by === 'coach' ? (g.due_date ?? '') : d.due_date}
+                              onChange={(e) =>
+                                g.set_by !== 'coach' &&
                                 setGoalDrafts((prev) => ({
                                   ...prev,
                                   [g.id]: { ...d, due_date: e.target.value },
                                 }))
                               }
                               type="date"
-                              className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+                              disabled={g.set_by === 'coach'}
+                              readOnly={g.set_by === 'coach'}
+                              className="flex-1 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50 disabled:bg-gray-50 disabled:text-gray-600 disabled:cursor-not-allowed"
                             />
+                            <span
+                              className={`rounded-lg px-2 py-1 text-xs font-semibold whitespace-nowrap ${
+                                g.set_by === 'coach'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-gray-100 text-gray-700'
+                              }`}
+                            >
+                              {g.set_by === 'coach' ? 'Set by coach' : 'Set by self'}
+                            </span>
                           </div>
                         </div>
                       </label>
 
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          disabled={isPending}
-                          onClick={() => {
-                            setMsg(null);
-                            setErrMsg(null);
-                            startTransition(async () => {
-                              try {
-                                await jsonFetch<{ goal: PlayerGoal }>(
-                                  `/api/players/${playerId}/goals/${g.id}`,
-                                  {
-                                    method: "PATCH",
-                                    body: JSON.stringify({
-                                      name: d.name.trim(),
-                                      due_date: d.due_date || null,
-                                    }),
-                                  }
-                                );
-                                await load();
-                                setMsg("Goal saved.");
-                              } catch (e2) {
-                                setErrMsg(
-                                  e2 instanceof Error
-                                    ? e2.message
-                                    : "Failed to save goal."
-                                );
-                              }
-                            });
-                          }}
-                          className="rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:opacity-60"
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isPending}
-                          onClick={() => {
-                            if (window.confirm(`Delete goal "${g.name}"?`)) {
+                      {g.set_by !== 'coach' && (
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => {
                               setMsg(null);
                               setErrMsg(null);
                               startTransition(async () => {
                                 try {
-                                  await jsonFetch<{ ok: true }>(
+                                  await jsonFetch<{ goal: PlayerGoal }>(
                                     `/api/players/${playerId}/goals/${g.id}`,
-                                    { method: "DELETE" }
+                                    {
+                                      method: "PATCH",
+                                      body: JSON.stringify({
+                                        name: d.name.trim(),
+                                        due_date: d.due_date || null,
+                                      }),
+                                    }
                                   );
                                   await load();
-                                  setMsg("Goal deleted.");
+                                  setMsg("Goal saved.");
                                 } catch (e2) {
                                   setErrMsg(
                                     e2 instanceof Error
                                       ? e2.message
-                                      : "Failed to delete goal."
+                                      : "Failed to save goal."
                                   );
                                 }
                               });
-                            }
-                          }}
-                          className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-300 disabled:opacity-60"
-                        >
-                          Delete
-                        </button>
-                      </div>
+                            }}
+                            className="rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:opacity-60"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => {
+                              if (window.confirm(`Delete goal "${g.name}"?`)) {
+                                setMsg(null);
+                                setErrMsg(null);
+                                startTransition(async () => {
+                                  try {
+                                    await jsonFetch<{ ok: true }>(
+                                      `/api/players/${playerId}/goals/${g.id}`,
+                                      { method: "DELETE" }
+                                    );
+                                    await load();
+                                    setMsg("Goal deleted.");
+                                  } catch (e2) {
+                                    setErrMsg(
+                                      e2 instanceof Error
+                                        ? e2.message
+                                        : "Failed to delete goal."
+                                    );
+                                  }
+                                });
+                              }
+                            }}
+                            className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-300 disabled:opacity-60"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -360,8 +385,19 @@ export function PlayerGoals({ playerId }: { playerId: string }) {
                         className="h-4 w-4 accent-emerald-600"
                       />
                       <div>
-                        <div className="text-sm font-semibold text-gray-900 line-through">
-                          {g.name}
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-semibold text-gray-900 line-through">
+                            {g.name}
+                          </div>
+                          <span
+                            className={`rounded-lg px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${
+                              g.set_by === 'coach'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}
+                          >
+                            {g.set_by === 'coach' ? 'Set by coach' : 'Set by self'}
+                          </span>
                         </div>
                         <div className="mt-0.5 text-xs text-gray-600">
                           {g.completed_at
@@ -373,34 +409,36 @@ export function PlayerGoals({ playerId }: { playerId: string }) {
                         </div>
                       </div>
                     </label>
-                    <button
-                      type="button"
-                      disabled={isPending}
-                      onClick={() => {
-                        if (
-                          window.confirm(`Delete completed goal "${g.name}"?`)
-                        ) {
-                          startTransition(async () => {
-                            try {
-                              await jsonFetch<{ ok: true }>(
-                                `/api/players/${playerId}/goals/${g.id}`,
-                                { method: "DELETE" }
-                              );
-                              await load();
-                            } catch (e2) {
-                              setErrMsg(
-                                e2 instanceof Error
-                                  ? e2.message
-                                  : "Failed to delete goal."
-                              );
-                            }
-                          });
-                        }
-                      }}
-                      className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-300 disabled:opacity-60"
-                    >
-                      Delete
-                    </button>
+                    {g.set_by !== 'coach' && (
+                      <button
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => {
+                          if (
+                            window.confirm(`Delete completed goal "${g.name}"?`)
+                          ) {
+                            startTransition(async () => {
+                              try {
+                                await jsonFetch<{ ok: true }>(
+                                  `/api/players/${playerId}/goals/${g.id}`,
+                                  { method: "DELETE" }
+                                );
+                                await load();
+                              } catch (e2) {
+                                setErrMsg(
+                                  e2 instanceof Error
+                                    ? e2.message
+                                    : "Failed to delete goal."
+                                );
+                              }
+                            });
+                          }
+                        }}
+                        className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-300 disabled:opacity-60"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               ))

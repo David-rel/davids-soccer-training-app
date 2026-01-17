@@ -10,6 +10,7 @@ type PlayerGoalRow = {
   due_date: string | null; // YYYY-MM-DD
   completed: boolean;
   completed_at: string | null;
+  set_by: 'parent' | 'coach';
   created_at: string;
   updated_at: string;
 };
@@ -62,6 +63,7 @@ export async function GET(
       due_date::text AS due_date,
       completed,
       completed_at,
+      set_by,
       created_at,
       updated_at
     FROM player_goals
@@ -83,6 +85,18 @@ export async function PATCH(
   const auth = await assertOwnsPlayer(req, playerId);
   if (!auth.ok) return auth.res;
 
+  // First, check if the goal exists and get its set_by value
+  const existingGoal = (await sql`
+    SELECT set_by
+    FROM player_goals
+    WHERE id = ${goalId} AND player_id = ${playerId}
+    LIMIT 1
+  `) as unknown as Array<{ set_by: 'parent' | 'coach' }>;
+
+  if (existingGoal.length === 0) {
+    return new Response("Not found", { status: 404 });
+  }
+
   const body = (await req.json().catch(() => null)) as Partial<{
     name: string;
     due_date: string | null;
@@ -92,6 +106,11 @@ export async function PATCH(
   const wantsName = body?.name !== undefined;
   const wantsDue = body?.due_date !== undefined;
   const wantsCompleted = body?.completed !== undefined;
+
+  // If trying to edit name or due_date on a coach-set goal, deny it
+  if (existingGoal[0].set_by === 'coach' && (wantsName || wantsDue)) {
+    return new Response("Cannot edit coach-set goals", { status: 403 });
+  }
 
   if (!wantsName && !wantsDue && !wantsCompleted) {
     return new Response("Nothing to update.", { status: 400 });
@@ -132,6 +151,7 @@ export async function PATCH(
       due_date::text AS due_date,
       completed,
       completed_at,
+      set_by,
       created_at,
       updated_at
   `) as unknown as PlayerGoalRow[];
@@ -149,6 +169,23 @@ export async function DELETE(
   const { playerId, goalId } = await ctx.params;
   const auth = await assertOwnsPlayer(req, playerId);
   if (!auth.ok) return auth.res;
+
+  // First, check if the goal exists and get its set_by value
+  const existingGoal = (await sql`
+    SELECT set_by
+    FROM player_goals
+    WHERE id = ${goalId} AND player_id = ${playerId}
+    LIMIT 1
+  `) as unknown as Array<{ set_by: 'parent' | 'coach' }>;
+
+  if (existingGoal.length === 0) {
+    return new Response("Not found", { status: 404 });
+  }
+
+  // Prevent deletion of coach-set goals by parents
+  if (existingGoal[0].set_by === 'coach') {
+    return new Response("Cannot delete coach-set goals", { status: 403 });
+  }
 
   const rows = (await sql`
     DELETE FROM player_goals

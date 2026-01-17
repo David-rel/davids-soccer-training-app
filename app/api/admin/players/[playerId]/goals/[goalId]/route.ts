@@ -10,6 +10,7 @@ type PlayerGoalRow = {
   due_date: string | null; // YYYY-MM-DD
   completed: boolean;
   completed_at: string | null;
+  set_by: 'parent' | 'coach';
   created_at: string;
   updated_at: string;
 };
@@ -39,6 +40,7 @@ export async function GET(
       due_date::text AS due_date,
       completed,
       completed_at,
+      set_by,
       created_at,
       updated_at
     FROM player_goals
@@ -110,6 +112,7 @@ export async function PATCH(
       due_date::text AS due_date,
       completed,
       completed_at,
+      set_by,
       created_at,
       updated_at
   `) as unknown as PlayerGoalRow[];

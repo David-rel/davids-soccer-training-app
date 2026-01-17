@@ -51,6 +51,7 @@ type PlayerGoal = {
   due_date: string | null; // YYYY-MM-DD
   completed: boolean;
   completed_at: string | null;
+  set_by: 'parent' | 'coach';
   created_at: string;
   updated_at: string;
 };
@@ -307,6 +308,11 @@ export default function AdminPlayerClient(props: {
       return;
     }
     const due = newGoalDueDate.trim();
+    // Validate date format if provided
+    if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+      setErrMsg("Date must be in YYYY-MM-DD format.");
+      return;
+    }
     await api<{ goal: PlayerGoal }>(`/api/admin/players/${id}/goals`, {
       method: "POST",
       securityCode: code,
@@ -991,20 +997,22 @@ export default function AdminPlayerClient(props: {
                                         className="mt-1 h-4 w-4 accent-emerald-600"
                                       />
                                       <div className="min-w-[240px] flex-1">
-                                        <input
-                                          value={d.name}
-                                          onChange={(e) =>
-                                            setGoalDrafts((prev) => ({
-                                              ...prev,
-                                              [g.id]: {
-                                                ...d,
-                                                name: e.target.value,
-                                              },
-                                            }))
-                                          }
-                                          className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                                        />
-                                        <div className="mt-2">
+                                        <div className="mb-2">
+                                          <input
+                                            value={d.name}
+                                            onChange={(e) =>
+                                              setGoalDrafts((prev) => ({
+                                                ...prev,
+                                                [g.id]: {
+                                                  ...d,
+                                                  name: e.target.value,
+                                                },
+                                              }))
+                                            }
+                                            className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+                                          />
+                                        </div>
+                                        <div className="flex items-center gap-2">
                                           <input
                                             value={d.due_date}
                                             onChange={(e) =>
@@ -1017,8 +1025,17 @@ export default function AdminPlayerClient(props: {
                                               }))
                                             }
                                             type="date"
-                                            className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+                                            className="flex-1 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
                                           />
+                                          <span
+                                            className={`rounded-lg px-2 py-1 text-xs font-semibold whitespace-nowrap ${
+                                              g.set_by === 'coach'
+                                                ? 'bg-blue-100 text-blue-700'
+                                                : 'bg-gray-100 text-gray-700'
+                                            }`}
+                                          >
+                                            {g.set_by === 'coach' ? 'Set by coach' : 'Set by parent'}
+                                          </span>
                                         </div>
                                       </div>
                                     </label>
@@ -1142,8 +1159,19 @@ export default function AdminPlayerClient(props: {
                                       className="h-4 w-4 accent-emerald-600"
                                     />
                                     <div>
-                                      <div className="text-sm font-semibold text-gray-900 line-through">
-                                        {g.name}
+                                      <div className="flex items-center gap-2">
+                                        <div className="text-sm font-semibold text-gray-900 line-through">
+                                          {g.name}
+                                        </div>
+                                        <span
+                                          className={`rounded-lg px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${
+                                            g.set_by === 'coach'
+                                              ? 'bg-blue-100 text-blue-700'
+                                              : 'bg-gray-100 text-gray-700'
+                                          }`}
+                                        >
+                                          {g.set_by === 'coach' ? 'Set by coach' : 'Set by parent'}
+                                        </span>
                                       </div>
                                       <div className="mt-0.5 text-xs text-gray-600">
                                         {g.completed_at
