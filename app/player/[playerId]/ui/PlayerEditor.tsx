@@ -80,29 +80,23 @@ export function PlayerEditor(props: { player: Player }) {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-6">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">
-            Player details
-          </h2>
-          <p className="mt-1 text-sm text-gray-600">
-            Update basic profile info. (Players are added by Coach David.)
-          </p>
-        </div>
-        <div className="hidden sm:flex sm:flex-col sm:items-end sm:gap-2">
-          {draft.profile_photo_url ? (
-            // Use <img> to avoid Next/Image remote domain configuration.
-            <img
-              src={draft.profile_photo_url}
-              alt="Profile"
-              className="h-18 w-18 rounded-2xl border border-emerald-200 object-cover"
-            />
-          ) : (
-            <div className="flex h-18 w-18 items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-700">
-              {draft.name?.slice(0, 1).toUpperCase() || "P"}
-            </div>
-          )}
+      {/* Photo upload section */}
+      <div className="mb-6 flex items-center gap-4">
+        {/* Photo display */}
+        {draft.profile_photo_url ? (
+          <img
+            src={draft.profile_photo_url}
+            alt="Profile"
+            className="h-20 w-20 rounded-2xl border-2 border-emerald-200 object-cover"
+          />
+        ) : (
+          <div className="flex h-20 w-20 items-center justify-center rounded-2xl border-2 border-emerald-200 bg-emerald-50 text-lg font-semibold text-emerald-700">
+            {draft.name?.slice(0, 1).toUpperCase() || "P"}
+          </div>
+        )}
 
+        {/* Upload controls */}
+        <div className="flex flex-col gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -143,7 +137,7 @@ export function PlayerEditor(props: { player: Player }) {
 
                 const data = (await res.json()) as { url: string };
                 setDraft((p) => ({ ...p, profile_photo_url: data.url }));
-                setSuccess("Photo uploaded. Click “Save changes” to apply.");
+                setSuccess('Photo uploaded. Click "Save changes" to apply.');
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Upload failed.");
               } finally {

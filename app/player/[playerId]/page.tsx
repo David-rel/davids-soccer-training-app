@@ -7,11 +7,7 @@ import { authOptions } from "@/lib/auth";
 import { sql } from "@/db";
 import { SignOutButton } from "@/app/ui/SignOutButton";
 import { PlayerEditor } from "@/app/player/[playerId]/ui/PlayerEditor";
-import { PlayerInsights } from "@/app/player/[playerId]/ui/PlayerInsights";
-import { PlayerGoals } from "@/app/player/[playerId]/ui/PlayerGoals";
-import { PlayerSessions } from "@/app/player/[playerId]/ui/PlayerSessions";
-import { PlayerVideos } from "@/app/player/[playerId]/ui/PlayerVideos";
-import { PinnedVideosByCoach } from "@/app/player/[playerId]/ui/PinnedVideosByCoach";
+import PlayerContentTabs from "@/app/player/[playerId]/ui/PlayerContentTabs";
 import { ChatWrapper } from "@/app/player/[playerId]/ui/ChatWrapper";
 
 type PlayerRow = {
@@ -107,67 +103,88 @@ export default async function PlayerPage(props: {
       </header>
 
       <main className="relative mx-auto max-w-6xl px-6 py-12">
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="space-y-6 lg:col-span-2">
-            <div className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
-              <PlayerEditor player={player} />
-            </div>
+        <div className="space-y-6">
+          {/* Section 1: Profile + Coach Notes Combined */}
+          <div className="rounded-3xl border border-emerald-200 bg-white p-8 shadow-sm">
+            <div className="grid gap-8 lg:grid-cols-2">
+              {/* Left: Player Details */}
+              <div>
+                <div className="mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Player Details
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-600">
+                    Update basic profile info.
+                  </p>
+                </div>
+                <PlayerEditor player={player} />
+              </div>
 
-            <PlayerSessions playerId={player.id} />
+              {/* Right: Coach Notes */}
+              <div>
+                <div className="mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Coach Notes
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-600">
+                    Personalized feedback from Coach David.
+                  </p>
+                </div>
 
-            <div className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
-              <PlayerInsights playerId={player.id} />
+                <div className="space-y-5">
+                  {/* Strengths */}
+                  {player.strengths && (
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4">
+                      <div className="text-sm font-semibold text-emerald-900">
+                        Strengths
+                      </div>
+                      <p className="mt-2 text-sm leading-relaxed text-gray-700">
+                        {player.strengths}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Focus Areas */}
+                  {player.focus_areas && (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4">
+                      <div className="text-sm font-semibold text-amber-900">
+                        Focus Areas
+                      </div>
+                      <p className="mt-2 text-sm leading-relaxed text-gray-700">
+                        {player.focus_areas}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Long-term Development */}
+                  {player.long_term_development_notes && (
+                    <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
+                      <div className="text-sm font-semibold text-blue-900">
+                        Long-term Development
+                      </div>
+                      <p className="mt-2 text-sm leading-relaxed text-gray-700">
+                        {player.long_term_development_notes}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Empty state */}
+                  {!player.strengths &&
+                    !player.focus_areas &&
+                    !player.long_term_development_notes && (
+                      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 text-center">
+                        <p className="text-sm text-gray-500">
+                          No coach notes yet. Check back after your next session!
+                        </p>
+                      </div>
+                    )}
+                </div>
+              </div>
             </div>
           </div>
 
-          <aside className="space-y-6">
-            <div className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
-              <div className="text-sm font-semibold text-gray-900">
-                Coach notes
-              </div>
-              <p className="mt-1 text-sm text-gray-600">
-                These sections are set by Coach David.
-              </p>
-
-              <div className="mt-5 space-y-4">
-                <div>
-                  <div className="text-xs font-semibold text-gray-900">
-                    Strengths
-                  </div>
-                  <div className="mt-1 text-sm text-gray-600">
-                    {player.strengths ?? "—"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-gray-900">
-                    Focus areas
-                  </div>
-                  <div className="mt-1 text-sm text-gray-600">
-                    {player.focus_areas ?? "—"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-gray-900">
-                    Long-term development notes
-                  </div>
-                  <div className="mt-1 text-sm text-gray-600">
-                    {player.long_term_development_notes ?? "—"}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <PlayerGoals playerId={player.id} />
-
-            <PinnedVideosByCoach playerId={player.id} />
-
-            <PlayerVideos playerId={player.id} />
-
-            <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-sm text-gray-700 shadow-sm">
-              Player profiles are created by Coach David. Parents can edit basic
-              profile info, but cannot add new players.
-            </div>
-          </aside>
+          {/* Section 2: Tabbed Content */}
+          <PlayerContentTabs playerId={player.id} />
         </div>
       </main>
 

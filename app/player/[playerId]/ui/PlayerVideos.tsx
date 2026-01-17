@@ -43,13 +43,14 @@ type ContinueWatchingVideo = Video & {
   rating_stars: number | null;
 };
 
-type ViewMode = "recommendations" | "browse" | "continue";
+type ViewMode = "recommendations" | "browse" | "continue" | "pinned";
 
 export function PlayerVideos({ playerId }: { playerId: string }) {
-  const [viewMode, setViewMode] = useState<ViewMode>("recommendations");
+  const [viewMode, setViewMode] = useState<ViewMode>("pinned");
   const [videos, setVideos] = useState<Video[]>([]);
   const [recommendations, setRecommendations] = useState<ScoredVideo[]>([]);
   const [continueWatching, setContinueWatching] = useState<ContinueWatchingVideo[]>([]);
+  const [pinnedVideos, setPinnedVideos] = useState<any[]>([]);
   const [recommendationMetadata, setRecommendationMetadata] = useState<RecommendationResponse["metadata"] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,11 +127,34 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
     }
   }
 
+  async function loadPinnedVideos() {
+    try {
+      setError(null);
+      setLoading(true);
+      const res = await fetch(`/api/players/${playerId}/videos/pinned`, {
+        cache: "no-store"
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load pinned videos: ${res.status}`);
+      }
+      const data = await res.json();
+      // Handle both array response and object with pins property
+      setPinnedVideos(Array.isArray(data) ? data : (data.pins ?? []));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load pinned videos");
+      console.error("Error loading pinned videos:", e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (viewMode === "recommendations") {
       loadRecommendations();
     } else if (viewMode === "continue") {
       loadContinueWatching();
+    } else if (viewMode === "pinned") {
+      loadPinnedVideos();
     } else {
       loadVideos();
     }
@@ -164,6 +188,8 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
     ? recommendations
     : viewMode === "continue"
     ? continueWatching
+    : viewMode === "pinned"
+    ? pinnedVideos
     : videos;
   const totalPages = Math.ceil(displayItems.length / VIDEOS_PER_PAGE);
   const startIndex = currentPage * VIDEOS_PER_PAGE;
@@ -172,6 +198,8 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
     ? recommendations.slice(startIndex, endIndex)
     : viewMode === "continue"
     ? continueWatching.slice(startIndex, endIndex)
+    : viewMode === "pinned"
+    ? pinnedVideos.slice(startIndex, endIndex)
     : videos.slice(startIndex, endIndex);
 
   const handleNextPage = () => {
@@ -227,15 +255,17 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
   }
 
   return (
-    <div className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-sm font-semibold text-gray-900">
+          <div className="text-lg font-semibold text-gray-900">
             Training Videos
           </div>
           <p className="mt-1 text-xs text-gray-600">
-            {viewMode === "recommendations"
+            {viewMode === "pinned"
+              ? "Videos selected by your coach for you to focus on."
+              : viewMode === "recommendations"
               ? "Personalized videos based on your test scores."
               : viewMode === "continue"
               ? "Pick up where you left off."
@@ -251,8 +281,19 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
         </button>
       </div>
 
-      {/* View Mode Toggle - 3 tabs */}
-      <div className="mt-4 flex gap-2">
+      {/* View Mode Toggle - 4 tabs */}
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <button
+          type="button"
+          onClick={() => setViewMode("pinned")}
+          className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+            viewMode === "pinned"
+              ? "bg-emerald-600 text-white"
+              : "border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+          }`}
+        >
+          Coach's Picks
+        </button>
         <button
           type="button"
           onClick={() => setViewMode("recommendations")}
@@ -402,6 +443,8 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
         <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-gray-600">
           {viewMode === "recommendations"
             ? "No recommendations available. Complete some tests to get personalized videos!"
+            : viewMode === "pinned"
+            ? "No pinned videos yet. Your coach hasn't pinned any videos for you."
             : "No videos available yet. Check back soon!"}
         </div>
       ) : (
@@ -461,6 +504,33 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
                       onWatch={() => handleVideoEngagement(cwVideo.id, "watch")}
                       onComplete={() => handleVideoEngagement(cwVideo.id, "complete")}
                     />
+                  );
+                })
+              : viewMode === "pinned"
+              ? currentVideos.map((item: any, idx: number) => {
+                  const pinnedItem = item;
+                  return (
+                    <div key={pinnedItem.video_id} className="space-y-2">
+                      {/* Priority badge and coach notes */}
+                      <div className="flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">
+                          {startIndex + idx + 1}
+                        </div>
+                        {pinnedItem.coach_notes && (
+                          <p className="text-xs italic text-emerald-800">
+                            {pinnedItem.coach_notes}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Video Card */}
+                      <VideoCard
+                        video={pinnedItem.video}
+                        playerId={playerId}
+                        onWatch={() => handleVideoEngagement(pinnedItem.video.id, "watch")}
+                        onComplete={() => handleVideoEngagement(pinnedItem.video.id, "complete")}
+                      />
+                    </div>
                   );
                 })
               : currentVideos.map((item) => {

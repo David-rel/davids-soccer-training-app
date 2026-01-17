@@ -55,11 +55,11 @@ export function PlayerSessions({ playerId }: { playerId: string }) {
   }, [playerId]);
 
   return (
-    <div className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
+    <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="text-lg font-semibold text-gray-900">
-            Training sessions
+            Training Sessions
           </div>
           <p className="mt-1 text-sm text-gray-600">
             Recent sessions with Coach David.

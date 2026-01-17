@@ -876,36 +876,50 @@ function Sparkline({
   const hoveredPoint = hoveredIndex !== null ? points[hoveredIndex] : null;
 
   return (
-    <div className="relative">
+    <div className="relative" onMouseLeave={() => setHoveredIndex(null)}>
+      {/* SVG for the line only */}
       <svg
         viewBox={`0 0 ${w} ${h}`}
         className="h-10 w-full rounded-xl border border-emerald-200 bg-white"
         preserveAspectRatio="none"
-        onMouseLeave={() => setHoveredIndex(null)}
       >
-        <path d={d} fill="none" stroke="#059669" strokeWidth="2" />
-        {points.map(([x, y, value, index], i) => (
-          <circle
-            key={i}
-            cx={x}
-            cy={y}
-            r={hoveredIndex === index ? "4" : "2.8"}
-            fill={
-              i === points.length - 1
-                ? improved
-                  ? "#059669"
-                  : "#111827"
-                : hoveredIndex === index
-                ? "#059669"
-                : "#059669"
-            }
-            opacity={hoveredIndex === index ? 1 : i === points.length - 1 ? 1 : 0.6}
-            className="cursor-pointer transition-all"
-            onMouseEnter={() => setHoveredIndex(index)}
-            style={{ pointerEvents: "all" }}
-          />
-        ))}
+        <path d={d} fill="none" stroke="#059669" strokeWidth="2" vectorEffect="non-scaling-stroke" />
       </svg>
+
+      {/* Absolutely positioned dots that don't scale */}
+      {points.map(([x, y, value, index], i) => {
+        const xPercent = (x / w) * 100;
+        const yPercent = (y / h) * 100;
+        const isLast = i === points.length - 1;
+        const isHovered = hoveredIndex === index;
+
+        return (
+          <div
+            key={i}
+            className="absolute cursor-pointer transition-all"
+            style={{
+              left: `${xPercent}%`,
+              top: `${yPercent}%`,
+              transform: 'translate(-50%, -50%)',
+            }}
+            onMouseEnter={() => setHoveredIndex(index)}
+          >
+            <div
+              className="rounded-full"
+              style={{
+                width: isHovered ? '14px' : '10px',
+                height: isHovered ? '14px' : '10px',
+                backgroundColor: isLast
+                  ? improved
+                    ? '#059669'
+                    : '#111827'
+                  : '#059669',
+                opacity: isHovered ? 1 : isLast ? 1 : 0.6,
+              }}
+            />
+          </div>
+        );
+      })}
       {hoveredPoint && (
         <div
           className="pointer-events-none absolute z-10 rounded-lg border border-emerald-200 bg-white px-2 py-1 text-xs font-medium text-gray-900 shadow-lg"
@@ -1037,7 +1051,7 @@ export function PlayerInsights({ playerId }: { playerId: string }) {
 
   if (loading) {
     return (
-      <div className="rounded-3xl border border-emerald-200 bg-white p-6 text-sm text-gray-600 shadow-sm">
+      <div className="text-sm text-gray-600">
         Loading insights…
       </div>
     );
@@ -1054,7 +1068,7 @@ export function PlayerInsights({ playerId }: { playerId: string }) {
         </p>
 
         {tests.length === 0 && rawTests.length === 0 ? (
-          <div className="mt-4 rounded-3xl border border-emerald-200 bg-white p-6 text-sm text-gray-600 shadow-sm">
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-gray-600">
             No tests recorded yet.
           </div>
         ) : (

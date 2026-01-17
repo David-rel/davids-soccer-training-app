@@ -79,10 +79,10 @@ export function PlayerGoals({ playerId }: { playerId: string }) {
   }, [goals]);
 
   return (
-    <div className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
+    <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-sm font-semibold text-gray-900">Goals</div>
+          <div className="text-lg font-semibold text-gray-900">Goals</div>
           <p className="mt-1 text-sm text-gray-600">
             Track what to work on and mark goals complete.
           </p>
