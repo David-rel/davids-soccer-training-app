@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { TEST_DEFINITIONS } from "@/lib/testDefinitions";
 import { PinnedVideos } from "./PinnedVideos";
+import { ContentSubmissionsSection } from "./ContentSubmissionsSection";
 
 type Player = {
   id: string;
@@ -69,6 +70,20 @@ type PlayerSession = {
   admin_notes: string | null;
   published: boolean;
   published_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type PlayerVideoUpload = {
+  id: string;
+  player_id: string;
+  video_url: string;
+  description: string | null;
+  status: "pending" | "reviewed";
+  upload_month: string;
+  coach_video_response_url: string | null;
+  coach_document_response_url: string | null;
+  coach_response_description: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -214,6 +229,7 @@ export default function AdminPlayerClient(props: {
 
   // Training sessions
   const [sessions, setSessions] = useState<PlayerSession[]>([]);
+  const [contentSubmissions, setContentSubmissions] = useState<PlayerVideoUpload[]>([]);
   const [newSessionTitle, setNewSessionTitle] = useState("");
   const [newSessionDate, setNewSessionDate] = useState("");
   const [newSessionPlan, setNewSessionPlan] = useState("");
@@ -354,6 +370,14 @@ export default function AdminPlayerClient(props: {
       { method: "GET", securityCode: code }
     );
     setSessions(data.sessions ?? []);
+  }
+
+  async function loadContentSubmissions(code: string, id: string) {
+    const data = await api<{ uploads: PlayerVideoUpload[] }>(
+      `/api/admin/players/${id}/content`,
+      { method: "GET", securityCode: code }
+    );
+    setContentSubmissions(data.uploads ?? []);
   }
 
   async function createSession(code: string, id: string) {
@@ -742,6 +766,7 @@ export default function AdminPlayerClient(props: {
                     await loadProfiles(securityCode, playerId);
                     await loadGoals(securityCode, playerId);
                     await loadSessions(securityCode, playerId);
+                    await loadContentSubmissions(securityCode, playerId);
                   } catch (e) {
                     setAuthError(
                       e instanceof Error ? e.message : "Unauthorized"
@@ -782,6 +807,7 @@ export default function AdminPlayerClient(props: {
                       await loadProfiles(securityCode, playerId);
                       await loadGoals(securityCode, playerId);
                       await loadSessions(securityCode, playerId);
+                      await loadContentSubmissions(securityCode, playerId);
                       setMsg("Refreshed.");
                     }}
                     disabled={isPending}
@@ -1636,6 +1662,23 @@ export default function AdminPlayerClient(props: {
 
               <div className="mt-8">
                 <PinnedVideos playerId={playerId ?? ""} />
+              </div>
+
+              <div className="mt-8">
+                <ContentSubmissionsSection
+                  playerId={playerId ?? ""}
+                  submissions={contentSubmissions}
+                  securityCode={securityCode}
+                  onReload={async () => {
+                    if (!playerId) return;
+                    await loadPlayer(securityCode, playerId);
+                    await loadTests(securityCode, playerId);
+                    await loadProfiles(securityCode, playerId);
+                    await loadGoals(securityCode, playerId);
+                    await loadSessions(securityCode, playerId);
+                    await loadContentSubmissions(securityCode, playerId);
+                  }}
+                />
               </div>
             </section>
 

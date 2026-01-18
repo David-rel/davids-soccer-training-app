@@ -5,8 +5,9 @@ import { PlayerInsights } from "./PlayerInsights";
 import { PlayerGoals } from "./PlayerGoals";
 import { PlayerSessions } from "./PlayerSessions";
 import { PlayerVideos } from "./PlayerVideos";
+import { PlayerUploads } from "./PlayerUploads";
 
-type TabType = "tests" | "goals" | "sessions" | "videos";
+type TabType = "tests" | "goals" | "sessions" | "videos" | "uploads";
 
 interface PlayerContentTabsProps {
   playerId: string;
@@ -18,7 +19,7 @@ export default function PlayerContentTabs({ playerId }: PlayerContentTabsProps) 
   return (
     <div className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
       {/* Tab Navigation */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <button
           onClick={() => setActiveTab("tests")}
           className={
@@ -59,6 +60,16 @@ export default function PlayerContentTabs({ playerId }: PlayerContentTabsProps) 
         >
           Videos
         </button>
+        <button
+          onClick={() => setActiveTab("uploads")}
+          className={
+            activeTab === "uploads"
+              ? "rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition"
+              : "rounded-xl border border-emerald-200 bg-white px-6 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+          }
+        >
+          Upload Content
+        </button>
       </div>
 
       {/* Tab Content */}
@@ -67,6 +78,7 @@ export default function PlayerContentTabs({ playerId }: PlayerContentTabsProps) 
         {activeTab === "goals" && <PlayerGoals playerId={playerId} />}
         {activeTab === "sessions" && <PlayerSessions playerId={playerId} />}
         {activeTab === "videos" && <PlayerVideos playerId={playerId} />}
+        {activeTab === "uploads" && <PlayerUploads playerId={playerId} />}
       </div>
     </div>
   );
