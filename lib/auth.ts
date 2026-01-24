@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 
 import { sql } from "@/db";
+import { normalizePhoneForLookup } from "@/lib/phone";
 
 type ParentRow = {
   id: string;
@@ -27,10 +28,12 @@ export const authOptions: NextAuthOptions = {
         if (!identifier || !password) return null;
 
         const isEmail = identifier.includes("@");
+        const phoneLookup = isEmail ? null : normalizePhoneForLookup(identifier);
+        if (!isEmail && !phoneLookup) return null;
 
         const rows = (isEmail
           ? await sql`SELECT id, email, phone, password_hash FROM parents WHERE lower(email) = lower(${identifier}) LIMIT 1`
-          : await sql`SELECT id, email, phone, password_hash FROM parents WHERE phone = ${identifier} LIMIT 1`) as unknown as ParentRow[];
+          : await sql`SELECT id, email, phone, password_hash FROM parents WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${phoneLookup} LIMIT 1`) as unknown as ParentRow[];
 
         const parent = rows[0];
         if (!parent) return null;

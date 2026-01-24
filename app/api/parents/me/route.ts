@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 
 import { authOptions } from "@/lib/auth";
 import { sql } from "@/db";
+import { normalizePhoneForLookup, normalizePhoneForStorage } from "@/lib/phone";
 
 type ParentRow = {
   id: string;
@@ -64,7 +65,7 @@ export async function PATCH(req: Request) {
   const cleanedEmail =
     nextEmail === null ? null : String(nextEmail).trim() || null;
   const cleanedPhone =
-    nextPhone === null ? null : String(nextPhone).trim() || null;
+    nextPhone === null ? null : normalizePhoneForStorage(nextPhone);
 
   if (!cleanedEmail && !cleanedPhone) {
     return json({ error: "Email or phone is required." }, 400);
@@ -86,11 +87,15 @@ export async function PATCH(req: Request) {
     }
   }
 
-  if (cleanedPhone && cleanedPhone !== parent.phone) {
+  const currentPhoneLookup = normalizePhoneForLookup(parent.phone);
+  const nextPhoneLookup = normalizePhoneForLookup(cleanedPhone);
+
+  if (nextPhoneLookup && nextPhoneLookup !== currentPhoneLookup) {
     const existing = (await sql`
       SELECT id
       FROM parents
-      WHERE phone = ${cleanedPhone} AND id <> ${parentId}
+      WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${nextPhoneLookup}
+        AND id <> ${parentId}
       LIMIT 1
     `) as unknown as { id: string }[];
     if (existing[0]) {

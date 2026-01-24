@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 
 import { assertAdmin } from "@/lib/adminAuth";
 import { sql } from "@/db";
+import { normalizePhoneForStorage } from "@/lib/phone";
 
 type ParentRow = {
   id: string;
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
     String(body?.email ?? "")
       .trim()
       .toLowerCase() || null;
-  const phone = String(body?.phone ?? "").trim() || null;
+  const phone = normalizePhoneForStorage(body?.phone ?? "");
   const password = String(body?.password ?? "");
 
   if (!email && !phone) {
