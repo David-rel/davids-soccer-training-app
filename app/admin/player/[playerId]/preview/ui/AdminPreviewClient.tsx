@@ -14,6 +14,7 @@ type Player = {
   primary_position: string | null;
   secondary_position: string | null;
   dominant_foot: string | null;
+  profile_photo_url: string | null;
   strengths: string | null;
   focus_areas: string | null;
   long_term_development_notes: string | null;
@@ -238,6 +239,20 @@ export default function AdminPreviewClient(props: {
                     Basic profile information (read-only preview).
                   </p>
                 </div>
+                
+                {/* Profile Picture */}
+                {player.profile_photo_url && (
+                  <div className="mb-6">
+                    <Image
+                      src={player.profile_photo_url}
+                      alt={player.name}
+                      width={120}
+                      height={120}
+                      className="h-30 w-30 rounded-full object-cover border-4 border-emerald-200"
+                    />
+                  </div>
+                )}
+                
                 <div className="space-y-4">
                   {player.birthdate && (
                     <div>

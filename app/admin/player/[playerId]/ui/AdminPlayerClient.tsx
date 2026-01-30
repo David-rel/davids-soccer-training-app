@@ -909,6 +909,23 @@ export default function AdminPlayerClient(props: {
                 </div>
               )}
 
+              {/* Profile Picture Display */}
+              {draft.profile_photo_url && (
+                <div className="mt-6 flex items-center gap-4">
+                  <Image
+                    src={draft.profile_photo_url}
+                    alt={draft.name}
+                    width={80}
+                    height={80}
+                    className="h-20 w-20 rounded-full object-cover border-2 border-emerald-200"
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">Profile Picture</div>
+                    <div className="text-xs text-gray-500 mt-1">Update URL below to change</div>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 <Field
                   label="Name"
