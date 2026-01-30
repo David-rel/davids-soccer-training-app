@@ -52,7 +52,7 @@ type PlayerGoal = {
   due_date: string | null; // YYYY-MM-DD
   completed: boolean;
   completed_at: string | null;
-  set_by: 'parent' | 'coach';
+  set_by: "parent" | "coach";
   created_at: string;
   updated_at: string;
 };
@@ -90,7 +90,7 @@ type PlayerVideoUpload = {
 
 async function api<T>(
   path: string,
-  opts: RequestInit & { securityCode: string }
+  opts: RequestInit & { securityCode: string },
 ): Promise<T> {
   const res = await fetch(path, {
     ...opts,
@@ -209,27 +209,32 @@ export default function AdminPlayerClient(props: {
     Record<string, { name: string; due_date: string }>
   >({});
   const [testName, setTestName] = useState<string>(
-    TEST_DEFINITIONS[0]?.name ?? ""
+    TEST_DEFINITIONS[0]?.name ?? "",
   );
   const [testDate, setTestDate] = useState<string>("");
   const [testScores, setTestScores] = useState<Record<string, string>>({});
   const [oneVOneRoundsCount, setOneVOneRoundsCount] = useState<number>(5);
   const [oneVOneRounds, setOneVOneRounds] = useState<string[]>(
-    Array.from({ length: 5 }, () => "")
+    Array.from({ length: 5 }, () => ""),
   );
   const [skillMovesCount, setSkillMovesCount] = useState<number>(6);
   const [skillMovesMinCount, setSkillMovesMinCount] = useState<number>(1);
   const [skillMoves, setSkillMoves] = useState<
     Array<{ name: string; score: string }>
   >(
-    Array.from({ length: 6 }, (_, i) => ({ name: `Move ${i + 1}`, score: "" }))
+    Array.from({ length: 6 }, (_, i) => ({ name: `Move ${i + 1}`, score: "" })),
   );
 
   const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
 
   // Training sessions
   const [sessions, setSessions] = useState<PlayerSession[]>([]);
-  const [contentSubmissions, setContentSubmissions] = useState<PlayerVideoUpload[]>([]);
+  const [contentSubmissions, setContentSubmissions] = useState<
+    PlayerVideoUpload[]
+  >([]);
+  const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [newSessionTitle, setNewSessionTitle] = useState("");
   const [newSessionDate, setNewSessionDate] = useState("");
   const [newSessionPlan, setNewSessionPlan] = useState("");
@@ -251,7 +256,7 @@ export default function AdminPlayerClient(props: {
 
   const computed = useMemo(
     () => calcBirthMeta(draft?.birthdate ?? null),
-    [draft?.birthdate]
+    [draft?.birthdate],
   );
 
   useEffect(() => {
@@ -287,7 +292,7 @@ export default function AdminPlayerClient(props: {
   async function loadTests(code: string, id: string) {
     const data = await api<{ tests: PlayerTest[] }>(
       `/api/admin/players/${id}/tests`,
-      { method: "GET", securityCode: code }
+      { method: "GET", securityCode: code },
     );
     setTests(data.tests);
   }
@@ -295,7 +300,7 @@ export default function AdminPlayerClient(props: {
   async function loadProfiles(code: string, id: string) {
     const data = await api<{ profiles: PlayerProfile[] }>(
       `/api/admin/players/${id}/profiles?limit=500`,
-      { method: "GET", securityCode: code }
+      { method: "GET", securityCode: code },
     );
     setProfiles(data.profiles);
   }
@@ -303,7 +308,7 @@ export default function AdminPlayerClient(props: {
   async function loadGoals(code: string, id: string) {
     const data = await api<{ goals: PlayerGoal[] }>(
       `/api/admin/players/${id}/goals`,
-      { method: "GET", securityCode: code }
+      { method: "GET", securityCode: code },
     );
     setGoals(data.goals ?? []);
     setGoalDrafts((prev) => {
@@ -343,7 +348,7 @@ export default function AdminPlayerClient(props: {
     code: string,
     playerId: string,
     goalId: string,
-    patch: Partial<Pick<PlayerGoal, "name" | "due_date" | "completed">>
+    patch: Partial<Pick<PlayerGoal, "name" | "due_date" | "completed">>,
   ) {
     await api<{ goal: PlayerGoal }>(
       `/api/admin/players/${playerId}/goals/${goalId}`,
@@ -351,7 +356,7 @@ export default function AdminPlayerClient(props: {
         method: "PATCH",
         securityCode: code,
         body: JSON.stringify(patch),
-      }
+      },
     );
     await loadGoals(code, playerId);
   }
@@ -367,7 +372,7 @@ export default function AdminPlayerClient(props: {
   async function loadSessions(code: string, id: string) {
     const data = await api<{ sessions: PlayerSession[] }>(
       `/api/admin/players/${id}/sessions`,
-      { method: "GET", securityCode: code }
+      { method: "GET", securityCode: code },
     );
     setSessions(data.sessions ?? []);
   }
@@ -375,7 +380,7 @@ export default function AdminPlayerClient(props: {
   async function loadContentSubmissions(code: string, id: string) {
     const data = await api<{ uploads: PlayerVideoUpload[] }>(
       `/api/admin/players/${id}/content`,
-      { method: "GET", securityCode: code }
+      { method: "GET", securityCode: code },
     );
     setContentSubmissions(data.uploads ?? []);
   }
@@ -391,23 +396,20 @@ export default function AdminPlayerClient(props: {
       setErrMsg("Session date is required.");
       return;
     }
-    await api<{ session: PlayerSession }>(
-      `/api/admin/players/${id}/sessions`,
-      {
-        method: "POST",
-        securityCode: code,
-        body: JSON.stringify({
-          title,
-          session_date: date,
-          session_plan: newSessionPlan.trim() || null,
-          focus_areas: newSessionFocus.trim() || null,
-          activities: newSessionActivities.trim() || null,
-          things_to_try: newSessionThingsToTry.trim() || null,
-          notes: newSessionNotes.trim() || null,
-          admin_notes: newSessionAdminNotes.trim() || null,
-        }),
-      }
-    );
+    await api<{ session: PlayerSession }>(`/api/admin/players/${id}/sessions`, {
+      method: "POST",
+      securityCode: code,
+      body: JSON.stringify({
+        title,
+        session_date: date,
+        session_plan: newSessionPlan.trim() || null,
+        focus_areas: newSessionFocus.trim() || null,
+        activities: newSessionActivities.trim() || null,
+        things_to_try: newSessionThingsToTry.trim() || null,
+        notes: newSessionNotes.trim() || null,
+        admin_notes: newSessionAdminNotes.trim() || null,
+      }),
+    });
     setNewSessionTitle("");
     setNewSessionDate("");
     setNewSessionPlan("");
@@ -422,7 +424,7 @@ export default function AdminPlayerClient(props: {
   async function saveSession(
     code: string,
     playerId: string,
-    sessionId: string
+    sessionId: string,
   ) {
     await api<{ session: PlayerSession }>(
       `/api/admin/players/${playerId}/sessions/${sessionId}`,
@@ -440,7 +442,7 @@ export default function AdminPlayerClient(props: {
           admin_notes: editSessionAdminNotes.trim() || null,
           published: editSessionPublished,
         }),
-      }
+      },
     );
     setEditingSessionId(null);
     await loadSessions(code, playerId);
@@ -449,14 +451,56 @@ export default function AdminPlayerClient(props: {
   async function deleteSession(
     code: string,
     playerId: string,
-    sessionId: string
+    sessionId: string,
   ) {
     await api<{ ok: true }>(
       `/api/admin/players/${playerId}/sessions/${sessionId}`,
       {
         method: "DELETE",
         securityCode: code,
-      }
+      },
+    );
+    await loadSessions(code, playerId);
+  }
+
+  async function togglePublishSession(
+    code: string,
+    playerId: string,
+    sessionId: string,
+    currentPublished: boolean,
+  ) {
+    const session = sessions.find((s) => s.id === sessionId);
+    if (!session) return;
+
+    // Toggle published status
+    setEditSessionPublished(!currentPublished);
+    setEditSessionTitle(session.title);
+    setEditSessionDate(session.session_date);
+    setEditSessionPlan(session.session_plan ?? "");
+    setEditSessionFocus(session.focus_areas ?? "");
+    setEditSessionActivities(session.activities ?? "");
+    setEditSessionThingsToTry(session.things_to_try ?? "");
+    setEditSessionNotes(session.notes ?? "");
+    setEditSessionAdminNotes(session.admin_notes ?? "");
+    setEditSessionPublished(!currentPublished);
+
+    await api<{ session: PlayerSession }>(
+      `/api/admin/players/${playerId}/sessions/${sessionId}`,
+      {
+        method: "PATCH",
+        securityCode: code,
+        body: JSON.stringify({
+          title: session.title,
+          session_date: session.session_date,
+          session_plan: session.session_plan,
+          focus_areas: session.focus_areas,
+          activities: session.activities,
+          things_to_try: session.things_to_try,
+          notes: session.notes,
+          admin_notes: session.admin_notes,
+          published: !currentPublished,
+        }),
+      },
     );
     await loadSessions(code, playerId);
   }
@@ -465,18 +509,18 @@ export default function AdminPlayerClient(props: {
   const [editTestName, setEditTestName] = useState<string>("");
   const [editTestDate, setEditTestDate] = useState<string>("");
   const [editTestScores, setEditTestScores] = useState<Record<string, string>>(
-    {}
+    {},
   );
   const [editOneVOneRoundsCount, setEditOneVOneRoundsCount] =
     useState<number>(5);
   const [editOneVOneRounds, setEditOneVOneRounds] = useState<string[]>(
-    Array.from({ length: 5 }, () => "")
+    Array.from({ length: 5 }, () => ""),
   );
   const [editSkillMovesCount, setEditSkillMovesCount] = useState<number>(6);
   const [editSkillMoves, setEditSkillMoves] = useState<
     Array<{ name: string; score: string }>
   >(
-    Array.from({ length: 6 }, (_, i) => ({ name: `Move ${i + 1}`, score: "" }))
+    Array.from({ length: 6 }, (_, i) => ({ name: `Move ${i + 1}`, score: "" })),
   );
 
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
@@ -495,7 +539,7 @@ export default function AdminPlayerClient(props: {
     return [
       ...arr,
       ...Array.from({ length: nextLen - arr.length }, (_, i) =>
-        make(arr.length + i)
+        make(arr.length + i),
       ),
     ];
   }
@@ -529,7 +573,7 @@ export default function AdminPlayerClient(props: {
         Array.from({ length: 6 }, (_, i) => ({
           name: `Move ${i + 1}`,
           score: "",
-        }))
+        })),
       );
       return;
     }
@@ -565,7 +609,7 @@ export default function AdminPlayerClient(props: {
             })
             .filter(
               (x): x is { idx: number; name: string; score: string } =>
-                x !== null
+                x !== null,
             )
             .sort((a, b) => a.idx - b.idx)
             .map(({ name, score }) => ({ name, score }));
@@ -573,7 +617,10 @@ export default function AdminPlayerClient(props: {
       const count = moves.length ? moves.length : 6;
       setEditSkillMovesCount(count);
       setEditSkillMoves(
-        resizeArray(moves, count, (i) => ({ name: `Move ${i + 1}`, score: "" }))
+        resizeArray(moves, count, (i) => ({
+          name: `Move ${i + 1}`,
+          score: "",
+        })),
       );
       setEditTestScores({});
       setEditOneVOneRoundsCount(5);
@@ -603,8 +650,8 @@ export default function AdminPlayerClient(props: {
       editTestName === "1v1"
         ? { rounds: editOneVOneRounds }
         : editTestName === "Skill Moves"
-        ? { moves: editSkillMoves }
-        : editTestScores;
+          ? { moves: editSkillMoves }
+          : editTestScores;
 
     await api<{ test: PlayerTest }>(
       `/api/admin/players/${playerId}/tests/${editingTestId}`,
@@ -616,7 +663,7 @@ export default function AdminPlayerClient(props: {
           test_date: editTestDate,
           scores,
         }),
-      }
+      },
     );
     await loadTests(securityCode, playerId);
     setEditingTestId(null);
@@ -656,7 +703,7 @@ export default function AdminPlayerClient(props: {
         method: "PATCH",
         securityCode,
         body: JSON.stringify({ name }),
-      }
+      },
     );
     await loadProfiles(securityCode, playerId);
     setEditingProfileId(null);
@@ -669,7 +716,7 @@ export default function AdminPlayerClient(props: {
     setErrMsg(null);
     await api<{ ok: true }>(
       `/api/admin/players/${playerId}/profiles/${profileId}`,
-      { method: "DELETE", securityCode }
+      { method: "DELETE", securityCode },
     );
     await loadProfiles(securityCode, playerId);
     if (editingProfileId === profileId) setEditingProfileId(null);
@@ -712,6 +759,38 @@ export default function AdminPlayerClient(props: {
             >
               Back to admin
             </Link>
+            {authorized && playerId && (
+              <Link
+                href={`/admin/player/${playerId}/preview`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+                title="View as parent sees it"
+              >
+                <span className="flex items-center gap-2">
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                    />
+                  </svg>
+                  Preview Parent View
+                </span>
+              </Link>
+            )}
             {authorized && (
               <button
                 type="button"
@@ -769,7 +848,7 @@ export default function AdminPlayerClient(props: {
                     await loadContentSubmissions(securityCode, playerId);
                   } catch (e) {
                     setAuthError(
-                      e instanceof Error ? e.message : "Unauthorized"
+                      e instanceof Error ? e.message : "Unauthorized",
                     );
                   }
                 }}
@@ -958,7 +1037,7 @@ export default function AdminPlayerClient(props: {
                           setErrMsg(
                             e instanceof Error
                               ? e.message
-                              : "Failed to add goal."
+                              : "Failed to add goal.",
                           );
                         }
                       });
@@ -1009,13 +1088,13 @@ export default function AdminPlayerClient(props: {
                                                 securityCode,
                                                 playerId,
                                                 g.id,
-                                                { completed: next }
+                                                { completed: next },
                                               );
                                             } catch (e2) {
                                               setErrMsg(
                                                 e2 instanceof Error
                                                   ? e2.message
-                                                  : "Failed to update goal."
+                                                  : "Failed to update goal.",
                                               );
                                             }
                                           });
@@ -1055,12 +1134,14 @@ export default function AdminPlayerClient(props: {
                                           />
                                           <span
                                             className={`rounded-lg px-2 py-1 text-xs font-semibold whitespace-nowrap ${
-                                              g.set_by === 'coach'
-                                                ? 'bg-blue-100 text-blue-700'
-                                                : 'bg-gray-100 text-gray-700'
+                                              g.set_by === "coach"
+                                                ? "bg-blue-100 text-blue-700"
+                                                : "bg-gray-100 text-gray-700"
                                             }`}
                                           >
-                                            {g.set_by === 'coach' ? 'Set by coach' : 'Set by parent'}
+                                            {g.set_by === "coach"
+                                              ? "Set by coach"
+                                              : "Set by parent"}
                                           </span>
                                         </div>
                                       </div>
@@ -1083,14 +1164,14 @@ export default function AdminPlayerClient(props: {
                                                 {
                                                   name: d.name.trim(),
                                                   due_date: d.due_date || null,
-                                                }
+                                                },
                                               );
                                               setMsg("Goal saved.");
                                             } catch (e2) {
                                               setErrMsg(
                                                 e2 instanceof Error
                                                   ? e2.message
-                                                  : "Failed to save goal."
+                                                  : "Failed to save goal.",
                                               );
                                             }
                                           });
@@ -1106,7 +1187,7 @@ export default function AdminPlayerClient(props: {
                                           if (!playerId) return;
                                           if (
                                             window.confirm(
-                                              `Delete goal "${g.name}"?`
+                                              `Delete goal "${g.name}"?`,
                                             )
                                           ) {
                                             setMsg(null);
@@ -1116,14 +1197,14 @@ export default function AdminPlayerClient(props: {
                                                 await deleteGoal(
                                                   securityCode,
                                                   playerId,
-                                                  g.id
+                                                  g.id,
                                                 );
                                                 setMsg("Goal deleted.");
                                               } catch (e2) {
                                                 setErrMsg(
                                                   e2 instanceof Error
                                                     ? e2.message
-                                                    : "Failed to delete goal."
+                                                    : "Failed to delete goal.",
                                                 );
                                               }
                                             });
@@ -1171,13 +1252,13 @@ export default function AdminPlayerClient(props: {
                                               securityCode,
                                               playerId,
                                               g.id,
-                                              { completed: next }
+                                              { completed: next },
                                             );
                                           } catch (e2) {
                                             setErrMsg(
                                               e2 instanceof Error
                                                 ? e2.message
-                                                : "Failed to update goal."
+                                                : "Failed to update goal.",
                                             );
                                           }
                                         });
@@ -1191,18 +1272,20 @@ export default function AdminPlayerClient(props: {
                                         </div>
                                         <span
                                           className={`rounded-lg px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${
-                                            g.set_by === 'coach'
-                                              ? 'bg-blue-100 text-blue-700'
-                                              : 'bg-gray-100 text-gray-700'
+                                            g.set_by === "coach"
+                                              ? "bg-blue-100 text-blue-700"
+                                              : "bg-gray-100 text-gray-700"
                                           }`}
                                         >
-                                          {g.set_by === 'coach' ? 'Set by coach' : 'Set by parent'}
+                                          {g.set_by === "coach"
+                                            ? "Set by coach"
+                                            : "Set by parent"}
                                         </span>
                                       </div>
                                       <div className="mt-0.5 text-xs text-gray-600">
                                         {g.completed_at
                                           ? `Completed ${new Date(
-                                              g.completed_at
+                                              g.completed_at,
                                             ).toLocaleDateString()}`
                                           : "Completed"}
                                         {g.due_date
@@ -1218,7 +1301,7 @@ export default function AdminPlayerClient(props: {
                                       if (!playerId) return;
                                       if (
                                         window.confirm(
-                                          `Delete completed goal "${g.name}"?`
+                                          `Delete completed goal "${g.name}"?`,
                                         )
                                       ) {
                                         startTransition(async () => {
@@ -1226,13 +1309,13 @@ export default function AdminPlayerClient(props: {
                                             await deleteGoal(
                                               securityCode,
                                               playerId,
-                                              g.id
+                                              g.id,
                                             );
                                           } catch (e2) {
                                             setErrMsg(
                                               e2 instanceof Error
                                                 ? e2.message
-                                                : "Failed to delete goal."
+                                                : "Failed to delete goal.",
                                             );
                                           }
                                         });
@@ -1324,7 +1407,7 @@ export default function AdminPlayerClient(props: {
                           setErrMsg(
                             e instanceof Error
                               ? e.message
-                              : "Failed to create session."
+                              : "Failed to create session.",
                           );
                         }
                       });
@@ -1341,255 +1424,352 @@ export default function AdminPlayerClient(props: {
                       All sessions
                     </div>
                     <div className="mt-3 grid gap-2">
-                      {sessions.map((s) => (
-                        <div
-                          key={s.id}
-                          className="rounded-2xl border border-emerald-200 bg-white px-4 py-3"
-                        >
-                          {editingSessionId === s.id ? (
-                            <div className="space-y-3">
-                              <Field
-                                label="Session title"
-                                value={editSessionTitle}
-                                onChange={setEditSessionTitle}
-                              />
-                              <Field
-                                label="Session date"
-                                value={editSessionDate}
-                                onChange={setEditSessionDate}
-                                type="date"
-                              />
-                              <TextArea
-                                label="Session plan"
-                                value={editSessionPlan}
-                                onChange={setEditSessionPlan}
-                              />
-                              <TextArea
-                                label="Focus areas"
-                                value={editSessionFocus}
-                                onChange={setEditSessionFocus}
-                              />
-                              <TextArea
-                                label="Activities"
-                                value={editSessionActivities}
-                                onChange={setEditSessionActivities}
-                              />
-                              <TextArea
-                                label="Things to try"
-                                value={editSessionThingsToTry}
-                                onChange={setEditSessionThingsToTry}
-                              />
-                              <TextArea
-                                label="Notes"
-                                value={editSessionNotes}
-                                onChange={setEditSessionNotes}
-                              />
-                              <TextArea
-                                label="Admin notes (private)"
-                                value={editSessionAdminNotes}
-                                onChange={setEditSessionAdminNotes}
-                              />
+                      {sessions
+                        .slice()
+                        .sort((a, b) => {
+                          // Sort by date descending (newest first)
+                          if (a.session_date !== b.session_date) {
+                            return b.session_date.localeCompare(a.session_date);
+                          }
+                          // If same date, sort by created_at descending
+                          return b.created_at.localeCompare(a.created_at);
+                        })
+                        .map((s) => {
+                          const isExpanded = expandedSessionIds.has(s.id);
+                          const toggleExpanded = () => {
+                            setExpandedSessionIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(s.id)) {
+                                next.delete(s.id);
+                              } else {
+                                next.add(s.id);
+                              }
+                              return next;
+                            });
+                          };
 
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={editSessionPublished}
-                                  onChange={(e) =>
-                                    setEditSessionPublished(e.target.checked)
-                                  }
-                                  className="h-4 w-4 rounded border-emerald-200"
-                                />
-                                <label className="text-sm font-medium text-gray-700">
-                                  Published (visible to parents)
-                                </label>
-                              </div>
+                          return (
+                            <div
+                              key={s.id}
+                              className="rounded-2xl border border-emerald-200 bg-white px-4 py-3"
+                            >
+                              {editingSessionId === s.id ? (
+                                <div className="space-y-3">
+                                  <Field
+                                    label="Session title"
+                                    value={editSessionTitle}
+                                    onChange={setEditSessionTitle}
+                                  />
+                                  <Field
+                                    label="Session date"
+                                    value={editSessionDate}
+                                    onChange={setEditSessionDate}
+                                    type="date"
+                                  />
+                                  <TextArea
+                                    label="Session plan"
+                                    value={editSessionPlan}
+                                    onChange={setEditSessionPlan}
+                                  />
+                                  <TextArea
+                                    label="Focus areas"
+                                    value={editSessionFocus}
+                                    onChange={setEditSessionFocus}
+                                  />
+                                  <TextArea
+                                    label="Activities"
+                                    value={editSessionActivities}
+                                    onChange={setEditSessionActivities}
+                                  />
+                                  <TextArea
+                                    label="Things to try"
+                                    value={editSessionThingsToTry}
+                                    onChange={setEditSessionThingsToTry}
+                                  />
+                                  <TextArea
+                                    label="Notes"
+                                    value={editSessionNotes}
+                                    onChange={setEditSessionNotes}
+                                  />
+                                  <TextArea
+                                    label="Admin notes (private)"
+                                    value={editSessionAdminNotes}
+                                    onChange={setEditSessionAdminNotes}
+                                  />
 
-                              <div className="flex flex-wrap justify-end gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingSessionId(null)}
-                                  className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isPending}
-                                  onClick={() => {
-                                    startTransition(async () => {
-                                      try {
-                                        if (!playerId) return;
-                                        await saveSession(
-                                          securityCode,
-                                          playerId,
-                                          s.id
-                                        );
-                                        setMsg("Session updated.");
-                                      } catch (e) {
-                                        setErrMsg(
-                                          e instanceof Error
-                                            ? e.message
-                                            : "Failed to update session."
-                                        );
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={editSessionPublished}
+                                      onChange={(e) =>
+                                        setEditSessionPublished(
+                                          e.target.checked,
+                                        )
                                       }
-                                    });
-                                  }}
-                                  className="rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:shadow-md disabled:opacity-50"
-                                >
-                                  Save
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <div className="text-sm font-semibold text-gray-900">
-                                    {s.title}
+                                      className="h-4 w-4 rounded border-emerald-200"
+                                    />
+                                    <label className="text-sm font-medium text-gray-700">
+                                      Published (visible to parents)
+                                    </label>
                                   </div>
-                                  <div className="text-xs text-gray-500">
-                                    {s.session_date}
+
+                                  <div className="flex flex-wrap justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingSessionId(null)}
+                                      className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isPending}
+                                      onClick={() => {
+                                        startTransition(async () => {
+                                          try {
+                                            if (!playerId) return;
+                                            await saveSession(
+                                              securityCode,
+                                              playerId,
+                                              s.id,
+                                            );
+                                            setMsg("Session updated.");
+                                          } catch (e) {
+                                            setErrMsg(
+                                              e instanceof Error
+                                                ? e.message
+                                                : "Failed to update session.",
+                                            );
+                                          }
+                                        });
+                                      }}
+                                      className="rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:shadow-md disabled:opacity-50"
+                                    >
+                                      Save
+                                    </button>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  {s.published ? (
-                                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                                      Published
-                                    </span>
-                                  ) : (
-                                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-                                      Draft
-                                    </span>
+                              ) : (
+                                <div className="space-y-2">
+                                  <div
+                                    className="flex items-start justify-between gap-3 cursor-pointer"
+                                    onClick={toggleExpanded}
+                                  >
+                                    <div className="flex items-start gap-2 flex-1">
+                                      <svg
+                                        className={`w-5 h-5 text-emerald-600 shrink-0 mt-0.5 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M9 5l7 7-7 7"
+                                        />
+                                      </svg>
+                                      <div>
+                                        <div className="text-sm font-semibold text-gray-900">
+                                          {s.title}
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                          {s.session_date}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {s.published ? (
+                                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                                          Published
+                                        </span>
+                                      ) : (
+                                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                                          Draft
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {isExpanded && (
+                                    <>
+                                      {s.session_plan && (
+                                        <div className="mt-2">
+                                          <div className="text-xs font-semibold text-gray-900">
+                                            Session plan
+                                          </div>
+                                          <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                                            {s.session_plan}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {s.focus_areas && (
+                                        <div className="mt-2">
+                                          <div className="text-xs font-semibold text-gray-900">
+                                            Focus areas
+                                          </div>
+                                          <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                                            {s.focus_areas}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {s.activities && (
+                                        <div className="mt-2">
+                                          <div className="text-xs font-semibold text-gray-900">
+                                            Activities
+                                          </div>
+                                          <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                                            {s.activities}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {s.things_to_try && (
+                                        <div className="mt-2">
+                                          <div className="text-xs font-semibold text-gray-900">
+                                            Things to try
+                                          </div>
+                                          <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                                            {s.things_to_try}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {s.notes && (
+                                        <div className="mt-2">
+                                          <div className="text-xs font-semibold text-gray-900">
+                                            Notes
+                                          </div>
+                                          <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                                            {s.notes}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {s.admin_notes && (
+                                        <div className="mt-2">
+                                          <div className="text-xs font-semibold text-gray-900">
+                                            Admin notes (private)
+                                          </div>
+                                          <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                                            {s.admin_notes}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        <button
+                                          type="button"
+                                          disabled={isPending}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            startTransition(async () => {
+                                              try {
+                                                if (!playerId) return;
+                                                await togglePublishSession(
+                                                  securityCode,
+                                                  playerId,
+                                                  s.id,
+                                                  s.published,
+                                                );
+                                                setMsg(
+                                                  s.published
+                                                    ? "Session unpublished."
+                                                    : "Session published.",
+                                                );
+                                              } catch (e) {
+                                                setErrMsg(
+                                                  e instanceof Error
+                                                    ? e.message
+                                                    : "Failed to update session.",
+                                                );
+                                              }
+                                            });
+                                          }}
+                                          className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+                                            s.published
+                                              ? "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                                              : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100"
+                                          }`}
+                                        >
+                                          {s.published
+                                            ? "Unpublish"
+                                            : "Publish"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingSessionId(s.id);
+                                            setEditSessionTitle(s.title);
+                                            setEditSessionDate(s.session_date);
+                                            setEditSessionPlan(
+                                              s.session_plan ?? "",
+                                            );
+                                            setEditSessionFocus(
+                                              s.focus_areas ?? "",
+                                            );
+                                            setEditSessionActivities(
+                                              s.activities ?? "",
+                                            );
+                                            setEditSessionThingsToTry(
+                                              s.things_to_try ?? "",
+                                            );
+                                            setEditSessionNotes(s.notes ?? "");
+                                            setEditSessionAdminNotes(
+                                              s.admin_notes ?? "",
+                                            );
+                                            setEditSessionPublished(
+                                              s.published,
+                                            );
+                                          }}
+                                          className="rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={isPending}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (
+                                              !confirm(
+                                                "Are you sure you want to delete this session?",
+                                              )
+                                            )
+                                              return;
+                                            startTransition(async () => {
+                                              try {
+                                                if (!playerId) return;
+                                                await deleteSession(
+                                                  securityCode,
+                                                  playerId,
+                                                  s.id,
+                                                );
+                                                setMsg("Session deleted.");
+                                              } catch (e) {
+                                                setErrMsg(
+                                                  e instanceof Error
+                                                    ? e.message
+                                                    : "Failed to delete session.",
+                                                );
+                                              }
+                                            });
+                                          }}
+                                          className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:border-red-300 disabled:opacity-50"
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>
+                                    </>
                                   )}
                                 </div>
-                              </div>
-
-                              {s.session_plan && (
-                                <div className="mt-2">
-                                  <div className="text-xs font-semibold text-gray-900">
-                                    Session plan
-                                  </div>
-                                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                                    {s.session_plan}
-                                  </div>
-                                </div>
                               )}
-
-                              {s.focus_areas && (
-                                <div className="mt-2">
-                                  <div className="text-xs font-semibold text-gray-900">
-                                    Focus areas
-                                  </div>
-                                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                                    {s.focus_areas}
-                                  </div>
-                                </div>
-                              )}
-
-                              {s.activities && (
-                                <div className="mt-2">
-                                  <div className="text-xs font-semibold text-gray-900">
-                                    Activities
-                                  </div>
-                                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                                    {s.activities}
-                                  </div>
-                                </div>
-                              )}
-
-                              {s.things_to_try && (
-                                <div className="mt-2">
-                                  <div className="text-xs font-semibold text-gray-900">
-                                    Things to try
-                                  </div>
-                                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                                    {s.things_to_try}
-                                  </div>
-                                </div>
-                              )}
-
-                              {s.notes && (
-                                <div className="mt-2">
-                                  <div className="text-xs font-semibold text-gray-900">
-                                    Notes
-                                  </div>
-                                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                                    {s.notes}
-                                  </div>
-                                </div>
-                              )}
-
-                              {s.admin_notes && (
-                                <div className="mt-2">
-                                  <div className="text-xs font-semibold text-gray-900">
-                                    Admin notes (private)
-                                  </div>
-                                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                                    {s.admin_notes}
-                                  </div>
-                                </div>
-                              )}
-
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingSessionId(s.id);
-                                    setEditSessionTitle(s.title);
-                                    setEditSessionDate(s.session_date);
-                                    setEditSessionPlan(s.session_plan ?? "");
-                                    setEditSessionFocus(s.focus_areas ?? "");
-                                    setEditSessionActivities(s.activities ?? "");
-                                    setEditSessionThingsToTry(
-                                      s.things_to_try ?? ""
-                                    );
-                                    setEditSessionNotes(s.notes ?? "");
-                                    setEditSessionAdminNotes(
-                                      s.admin_notes ?? ""
-                                    );
-                                    setEditSessionPublished(s.published);
-                                  }}
-                                  className="rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isPending}
-                                  onClick={() => {
-                                    if (
-                                      !confirm(
-                                        "Are you sure you want to delete this session?"
-                                      )
-                                    )
-                                      return;
-                                    startTransition(async () => {
-                                      try {
-                                        if (!playerId) return;
-                                        await deleteSession(
-                                          securityCode,
-                                          playerId,
-                                          s.id
-                                        );
-                                        setMsg("Session deleted.");
-                                      } catch (e) {
-                                        setErrMsg(
-                                          e instanceof Error
-                                            ? e.message
-                                            : "Failed to delete session."
-                                        );
-                                      }
-                                    });
-                                  }}
-                                  className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:border-red-300 disabled:opacity-50"
-                                >
-                                  Delete
-                                </button>
-                              </div>
                             </div>
-                          )}
-                        </div>
-                      ))}
+                          );
+                        })}
                     </div>
                   </div>
                 )}
@@ -1642,14 +1822,14 @@ export default function AdminPlayerClient(props: {
                               long_term_development_notes:
                                 draft.long_term_development_notes,
                             }),
-                          }
+                          },
                         );
                         setPlayer(data.player);
                         setDraft(data.player);
                         setMsg("Saved.");
                       } catch (e) {
                         setErrMsg(
-                          e instanceof Error ? e.message : "Save failed."
+                          e instanceof Error ? e.message : "Save failed.",
                         );
                       }
                     });
@@ -1724,17 +1904,23 @@ export default function AdminPlayerClient(props: {
                             // Process tests from newest to oldest, so earlier iterations set the most recent scores
                             for (const test of allSkillMovesTests) {
                               const scores = test.scores ?? {};
-                              const movesRaw = (scores as { moves?: unknown }).moves;
+                              const movesRaw = (scores as { moves?: unknown })
+                                .moves;
 
                               if (Array.isArray(movesRaw)) {
                                 movesRaw.forEach((m) => {
-                                  const obj = (m ?? {}) as Record<string, unknown>;
+                                  const obj = (m ?? {}) as Record<
+                                    string,
+                                    unknown
+                                  >;
                                   const name = String(obj.name ?? "").trim();
                                   if (name && !moveScoresMap.has(name)) {
                                     // First time seeing this move (most recent)
-                                    const score = obj.score === null || obj.score === undefined
-                                      ? ""
-                                      : String(obj.score);
+                                    const score =
+                                      obj.score === null ||
+                                      obj.score === undefined
+                                        ? ""
+                                        : String(obj.score);
                                     moveScoresMap.set(name, score);
                                   }
                                 });
@@ -1747,9 +1933,11 @@ export default function AdminPlayerClient(props: {
                                     if (name && !moveScoresMap.has(name)) {
                                       const idx = Number(m[1]);
                                       const scoreKey = `skillmove_${idx}`;
-                                      const score = scores[scoreKey] === null || scores[scoreKey] === undefined
-                                        ? ""
-                                        : String(scores[scoreKey]);
+                                      const score =
+                                        scores[scoreKey] === null ||
+                                        scores[scoreKey] === undefined
+                                          ? ""
+                                          : String(scores[scoreKey]);
                                       moveScoresMap.set(name, score);
                                     }
                                   }
@@ -1758,22 +1946,30 @@ export default function AdminPlayerClient(props: {
                             }
 
                             // Convert to array
-                            const movesWithScores = Array.from(moveScoresMap.entries()).map(([name, score]) => ({
+                            const movesWithScores = Array.from(
+                              moveScoresMap.entries(),
+                            ).map(([name, score]) => ({
                               name,
                               score,
                             }));
 
                             const minCount = movesWithScores.length; // Can't have fewer than existing moves
-                            const count = Math.max(6, movesWithScores.length + 2);
+                            const count = Math.max(
+                              6,
+                              movesWithScores.length + 2,
+                            );
 
                             setSkillMovesMinCount(minCount);
                             setSkillMovesCount(count);
                             setSkillMoves([
                               ...movesWithScores,
-                              ...Array.from({ length: count - movesWithScores.length }, (_, i) => ({
-                                name: `Move ${movesWithScores.length + i + 1}`,
-                                score: "",
-                              })),
+                              ...Array.from(
+                                { length: count - movesWithScores.length },
+                                (_, i) => ({
+                                  name: `Move ${movesWithScores.length + i + 1}`,
+                                  score: "",
+                                }),
+                              ),
                             ]);
                           } else {
                             // No previous test - use default blank moves
@@ -1783,7 +1979,7 @@ export default function AdminPlayerClient(props: {
                               Array.from({ length: 6 }, (_, i) => ({
                                 name: `Move ${i + 1}`,
                                 score: "",
-                              }))
+                              })),
                             );
                           }
                         }
@@ -1823,11 +2019,11 @@ export default function AdminPlayerClient(props: {
                                   e.target.value,
                                   1,
                                   50,
-                                  5
+                                  5,
                                 );
                                 setOneVOneRoundsCount(next);
                                 setOneVOneRounds((prev) =>
-                                  resizeArray(prev, next, () => "")
+                                  resizeArray(prev, next, () => ""),
                                 );
                               }}
                               inputMode="numeric"
@@ -1845,8 +2041,8 @@ export default function AdminPlayerClient(props: {
                                 onChange={(e) =>
                                   setOneVOneRounds((prev) =>
                                     prev.map((x, idx) =>
-                                      idx === i ? e.target.value : x
-                                    )
+                                      idx === i ? e.target.value : x,
+                                    ),
                                   )
                                 }
                                 inputMode="decimal"
@@ -1871,12 +2067,15 @@ export default function AdminPlayerClient(props: {
                                   resizeArray(prev, next, (i) => ({
                                     name: `Move ${i + 1}`,
                                     score: "",
-                                  }))
+                                  })),
                                 );
                               }}
                               className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
                             >
-                              {Array.from({ length: 51 - skillMovesMinCount }, (_, i) => skillMovesMinCount + i).map((num) => (
+                              {Array.from(
+                                { length: 51 - skillMovesMinCount },
+                                (_, i) => skillMovesMinCount + i,
+                              ).map((num) => (
                                 <option key={num} value={num}>
                                   {num}
                                 </option>
@@ -1893,8 +2092,8 @@ export default function AdminPlayerClient(props: {
                                     prev.map((x, idx) =>
                                       idx === i
                                         ? { ...x, name: e.target.value }
-                                        : x
-                                    )
+                                        : x,
+                                    ),
                                   )
                                 }
                                 className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50 sm:col-span-2"
@@ -1907,8 +2106,8 @@ export default function AdminPlayerClient(props: {
                                     prev.map((x, idx) =>
                                       idx === i
                                         ? { ...x, score: e.target.value }
-                                        : x
-                                    )
+                                        : x,
+                                    ),
                                   )
                                 }
                                 inputMode="decimal"
@@ -1965,8 +2164,8 @@ export default function AdminPlayerClient(props: {
                             testName === "1v1"
                               ? { rounds: oneVOneRounds }
                               : testName === "Skill Moves"
-                              ? { moves: skillMoves }
-                              : testScores;
+                                ? { moves: skillMoves }
+                                : testScores;
 
                           await api<{ test: PlayerTest }>(
                             `/api/admin/players/${playerId}/tests`,
@@ -1978,7 +2177,7 @@ export default function AdminPlayerClient(props: {
                                 test_date: testDate,
                                 scores,
                               }),
-                            }
+                            },
                           );
 
                           setTestScores({});
@@ -1988,7 +2187,7 @@ export default function AdminPlayerClient(props: {
                             Array.from({ length: 6 }, (_, i) => ({
                               name: `Move ${i + 1}`,
                               score: "",
-                            }))
+                            })),
                           );
                           setSkillMovesCount(6);
                           await loadTests(securityCode, playerId);
@@ -1997,7 +2196,7 @@ export default function AdminPlayerClient(props: {
                           setErrMsg(
                             e instanceof Error
                               ? e.message
-                              : "Failed to save test."
+                              : "Failed to save test.",
                           );
                         }
                       });
@@ -2039,7 +2238,7 @@ export default function AdminPlayerClient(props: {
                               if (
                                 t.test_name === "1v1" &&
                                 Array.isArray(
-                                  (s as { rounds?: unknown }).rounds
+                                  (s as { rounds?: unknown }).rounds,
                                 )
                               ) {
                                 return `${
@@ -2079,7 +2278,7 @@ export default function AdminPlayerClient(props: {
                               onClick={() => {
                                 if (
                                   window.confirm(
-                                    `Delete test "${t.test_name}" on ${t.test_date}?`
+                                    `Delete test "${t.test_name}" on ${t.test_date}?`,
                                   )
                                 ) {
                                   startTransition(async () => {
@@ -2089,7 +2288,7 @@ export default function AdminPlayerClient(props: {
                                       setErrMsg(
                                         e instanceof Error
                                           ? e.message
-                                          : "Failed to delete test."
+                                          : "Failed to delete test.",
                                       );
                                     }
                                   });
@@ -2121,7 +2320,7 @@ export default function AdminPlayerClient(props: {
                                       if (next === "1v1") {
                                         setEditOneVOneRoundsCount(5);
                                         setEditOneVOneRounds(
-                                          Array.from({ length: 5 }, () => "")
+                                          Array.from({ length: 5 }, () => ""),
                                         );
                                       }
                                       if (next === "Skill Moves") {
@@ -2130,7 +2329,7 @@ export default function AdminPlayerClient(props: {
                                           Array.from({ length: 6 }, (_, i) => ({
                                             name: `Move ${i + 1}`,
                                             score: "",
-                                          }))
+                                          })),
                                         );
                                       }
                                     }}
@@ -2164,22 +2363,22 @@ export default function AdminPlayerClient(props: {
                                           </div>
                                           <input
                                             value={String(
-                                              editOneVOneRoundsCount
+                                              editOneVOneRoundsCount,
                                             )}
                                             onChange={(e) => {
                                               const next = clampCount(
                                                 e.target.value,
                                                 1,
                                                 50,
-                                                5
+                                                5,
                                               );
                                               setEditOneVOneRoundsCount(next);
                                               setEditOneVOneRounds((prev) =>
                                                 resizeArray(
                                                   prev,
                                                   next,
-                                                  () => ""
-                                                )
+                                                  () => "",
+                                                ),
                                               );
                                             }}
                                             inputMode="numeric"
@@ -2201,8 +2400,8 @@ export default function AdminPlayerClient(props: {
                                                   prev.map((x, idx) =>
                                                     idx === i
                                                       ? e.target.value
-                                                      : x
-                                                  )
+                                                      : x,
+                                                  ),
                                                 )
                                               }
                                               inputMode="decimal"
@@ -2221,7 +2420,9 @@ export default function AdminPlayerClient(props: {
                                           <select
                                             value={String(editSkillMovesCount)}
                                             onChange={(e) => {
-                                              const next = Number(e.target.value);
+                                              const next = Number(
+                                                e.target.value,
+                                              );
                                               setEditSkillMovesCount(next);
                                               setEditSkillMoves((prev) =>
                                                 resizeArray(
@@ -2230,13 +2431,16 @@ export default function AdminPlayerClient(props: {
                                                   (i) => ({
                                                     name: `Move ${i + 1}`,
                                                     score: "",
-                                                  })
-                                                )
+                                                  }),
+                                                ),
                                               );
                                             }}
                                             className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
                                           >
-                                            {Array.from({ length: 50 }, (_, i) => i + 1).map((num) => (
+                                            {Array.from(
+                                              { length: 50 },
+                                              (_, i) => i + 1,
+                                            ).map((num) => (
                                               <option key={num} value={num}>
                                                 {num}
                                               </option>
@@ -2258,8 +2462,8 @@ export default function AdminPlayerClient(props: {
                                                           ...x,
                                                           name: e.target.value,
                                                         }
-                                                      : x
-                                                  )
+                                                      : x,
+                                                  ),
                                                 )
                                               }
                                               className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50 sm:col-span-2"
@@ -2275,8 +2479,8 @@ export default function AdminPlayerClient(props: {
                                                           ...x,
                                                           score: e.target.value,
                                                         }
-                                                      : x
-                                                  )
+                                                      : x,
+                                                  ),
                                                 )
                                               }
                                               inputMode="decimal"
@@ -2289,7 +2493,7 @@ export default function AdminPlayerClient(props: {
                                     ) : (
                                       (
                                         TEST_DEFINITIONS.find(
-                                          (td) => td.name === editTestName
+                                          (td) => td.name === editTestName,
                                         )?.fields ?? []
                                       ).map((f) => (
                                         <div
@@ -2340,7 +2544,7 @@ export default function AdminPlayerClient(props: {
                                           setErrMsg(
                                             e instanceof Error
                                               ? e.message
-                                              : "Failed to update test."
+                                              : "Failed to update test.",
                                           );
                                         }
                                       });
@@ -2411,7 +2615,7 @@ export default function AdminPlayerClient(props: {
                               body: JSON.stringify({
                                 name: `Recompute ${new Date().toLocaleString()}`,
                               }),
-                            }
+                            },
                           );
                           await loadProfiles(securityCode, playerId);
                           setMsg("Profile recomputed.");
@@ -2419,7 +2623,7 @@ export default function AdminPlayerClient(props: {
                           setErrMsg(
                             e instanceof Error
                               ? e.message
-                              : "Failed to recompute profile."
+                              : "Failed to recompute profile.",
                           );
                         }
                       });
@@ -2472,7 +2676,7 @@ export default function AdminPlayerClient(props: {
                                         setErrMsg(
                                           e instanceof Error
                                             ? e.message
-                                            : "Failed to update profile."
+                                            : "Failed to update profile.",
                                         );
                                       }
                                     });
@@ -2516,7 +2720,7 @@ export default function AdminPlayerClient(props: {
                                   onClick={() => {
                                     if (
                                       window.confirm(
-                                        `Delete profile snapshot "${p.name}"?`
+                                        `Delete profile snapshot "${p.name}"?`,
                                       )
                                     ) {
                                       startTransition(async () => {
@@ -2526,7 +2730,7 @@ export default function AdminPlayerClient(props: {
                                           setErrMsg(
                                             e instanceof Error
                                               ? e.message
-                                              : "Failed to delete profile."
+                                              : "Failed to delete profile.",
                                           );
                                         }
                                       });

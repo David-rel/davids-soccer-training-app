@@ -15,7 +15,7 @@ type PlayerTestRow = {
 
 export async function GET(
   req: NextRequest,
-  ctx: { params: Promise<{ playerId: string }> }
+  ctx: { params: Promise<{ playerId: string }> },
 ) {
   const token = await getToken({ req });
   const parentId = token?.sub;

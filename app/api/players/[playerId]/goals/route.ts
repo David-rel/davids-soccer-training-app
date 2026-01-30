@@ -10,7 +10,7 @@ type PlayerGoalRow = {
   due_date: string | null; // YYYY-MM-DD
   completed: boolean;
   completed_at: string | null;
-  set_by: 'parent' | 'coach';
+  set_by: "parent" | "coach";
   created_at: string;
   updated_at: string;
 };
@@ -49,7 +49,7 @@ async function assertOwnsPlayer(req: NextRequest, playerId: string) {
 
 export async function GET(
   req: NextRequest,
-  ctx: { params: Promise<{ playerId: string }> }
+  ctx: { params: Promise<{ playerId: string }> },
 ) {
   const { playerId } = await ctx.params;
   const auth = await assertOwnsPlayer(req, playerId);
@@ -77,7 +77,7 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  ctx: { params: Promise<{ playerId: string }> }
+  ctx: { params: Promise<{ playerId: string }> },
 ) {
   const { playerId } = await ctx.params;
   const auth = await assertOwnsPlayer(req, playerId);

@@ -18,6 +18,7 @@ type PlayerSession = {
 
 export function PlayerSessions({ playerId }: { playerId: string }) {
   const [sessions, setSessions] = useState<PlayerSession[]>([]);
+  const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,7 +34,11 @@ export function PlayerSessions({ playerId }: { playerId: string }) {
         throw new Error(`Failed to load sessions: ${res.status} - ${errorText}`);
       }
       const data = await res.json();
-      setSessions(data.sessions ?? []);
+      // Sort by created_at descending (newest first)
+      const sorted = (data.sessions ?? []).sort((a: PlayerSession, b: PlayerSession) => 
+        b.created_at.localeCompare(a.created_at)
+      );
+      setSessions(sorted);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load sessions");
       console.error("Error loading sessions:", e);
@@ -88,74 +93,108 @@ export function PlayerSessions({ playerId }: { playerId: string }) {
         </div>
       ) : (
         <div className="mt-5 space-y-3">
-          {sessions.map((s) => (
-            <div
-              key={s.id}
-              className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="text-sm font-semibold text-gray-900">
-                  {s.title}
+          {sessions.map((s) => {
+            const isExpanded = expandedSessionIds.has(s.id);
+            const toggleExpanded = () => {
+              setExpandedSessionIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(s.id)) {
+                  next.delete(s.id);
+                } else {
+                  next.add(s.id);
+                }
+                return next;
+              });
+            };
+
+            return (
+              <div
+                key={s.id}
+                className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"
+              >
+                <div 
+                  className="flex items-start justify-between gap-3 cursor-pointer"
+                  onClick={toggleExpanded}
+                >
+                  <div className="flex items-start gap-2 flex-1">
+                    <svg
+                      className={`w-5 h-5 text-emerald-600 shrink-0 mt-0.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        {s.title}
+                      </div>
+                      <div className="text-xs text-gray-500">{s.session_date}</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xs text-gray-500">{s.session_date}</div>
+
+                {isExpanded && (
+                  <>
+                    {s.session_plan && (
+                      <div className="mt-3">
+                        <div className="text-xs font-semibold text-gray-900">
+                          Session plan
+                        </div>
+                        <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                          {s.session_plan}
+                        </div>
+                      </div>
+                    )}
+
+                    {s.focus_areas && (
+                      <div className="mt-3">
+                        <div className="text-xs font-semibold text-gray-900">
+                          Focus areas
+                        </div>
+                        <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                          {s.focus_areas}
+                        </div>
+                      </div>
+                    )}
+
+                    {s.activities && (
+                      <div className="mt-3">
+                        <div className="text-xs font-semibold text-gray-900">
+                          What we worked on
+                        </div>
+                        <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                          {s.activities}
+                        </div>
+                      </div>
+                    )}
+
+                    {s.things_to_try && (
+                      <div className="mt-3">
+                        <div className="text-xs font-semibold text-gray-900">
+                          Things to try
+                        </div>
+                        <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                          {s.things_to_try}
+                        </div>
+                      </div>
+                    )}
+
+                    {s.notes && (
+                      <div className="mt-3">
+                        <div className="text-xs font-semibold text-gray-900">
+                          Notes
+                        </div>
+                        <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
+                          {s.notes}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-
-              {s.session_plan && (
-                <div className="mt-3">
-                  <div className="text-xs font-semibold text-gray-900">
-                    Session plan
-                  </div>
-                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                    {s.session_plan}
-                  </div>
-                </div>
-              )}
-
-              {s.focus_areas && (
-                <div className="mt-3">
-                  <div className="text-xs font-semibold text-gray-900">
-                    Focus areas
-                  </div>
-                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                    {s.focus_areas}
-                  </div>
-                </div>
-              )}
-
-              {s.activities && (
-                <div className="mt-3">
-                  <div className="text-xs font-semibold text-gray-900">
-                    What we worked on
-                  </div>
-                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                    {s.activities}
-                  </div>
-                </div>
-              )}
-
-              {s.things_to_try && (
-                <div className="mt-3">
-                  <div className="text-xs font-semibold text-gray-900">
-                    Things to try
-                  </div>
-                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                    {s.things_to_try}
-                  </div>
-                </div>
-              )}
-
-              {s.notes && (
-                <div className="mt-3">
-                  <div className="text-xs font-semibold text-gray-900">
-                    Notes
-                  </div>
-                  <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                    {s.notes}
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

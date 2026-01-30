@@ -44,7 +44,7 @@ async function assertOwnsPlayer(req: NextRequest, playerId: string) {
 
 export async function GET(
   req: NextRequest,
-  ctx: { params: Promise<{ playerId: string }> }
+  ctx: { params: Promise<{ playerId: string }> },
 ) {
   const startTime = Date.now();
 
@@ -88,7 +88,9 @@ export async function GET(
         FROM coach_video_pins cvp
         WHERE cvp.player_id = ${playerId}
         ORDER BY cvp.priority DESC
-      ` as unknown as Promise<Array<{ video_id: string; priority: number; note: string | null }>>,
+      ` as unknown as Promise<
+        Array<{ video_id: string; priority: number; note: string | null }>
+      >,
     ]);
 
     // 3. Compute recommendations using core algorithm
@@ -105,20 +107,26 @@ export async function GET(
 
     // 4. Move coach-pinned videos to the top (preserving their priority order)
     if (pinnedVideos.length > 0) {
-      const pinnedVideoIds = new Set(pinnedVideos.map(p => p.video_id));
-      const pinned = recommendations.filter(r => pinnedVideoIds.has(r.video.id));
-      const notPinned = recommendations.filter(r => !pinnedVideoIds.has(r.video.id));
+      const pinnedVideoIds = new Set(pinnedVideos.map((p) => p.video_id));
+      const pinned = recommendations.filter((r) =>
+        pinnedVideoIds.has(r.video.id),
+      );
+      const notPinned = recommendations.filter(
+        (r) => !pinnedVideoIds.has(r.video.id),
+      );
 
       // Sort pinned by coach's priority
       pinned.sort((a, b) => {
-        const priorityA = pinnedVideos.find(p => p.video_id === a.video.id)?.priority || 0;
-        const priorityB = pinnedVideos.find(p => p.video_id === b.video.id)?.priority || 0;
+        const priorityA =
+          pinnedVideos.find((p) => p.video_id === a.video.id)?.priority || 0;
+        const priorityB =
+          pinnedVideos.find((p) => p.video_id === b.video.id)?.priority || 0;
         return priorityB - priorityA;
       });
 
       // Add "Coach Recommended" reason to pinned videos
-      pinned.forEach(p => {
-        const pin = pinnedVideos.find(pv => pv.video_id === p.video.id);
+      pinned.forEach((p) => {
+        const pin = pinnedVideos.find((pv) => pv.video_id === p.video.id);
         p.reason = pin?.note || "Coach Recommended";
       });
 
@@ -148,7 +156,7 @@ export async function GET(
     console.error("Error computing recommendations:", error);
     return Response.json(
       { error: "Failed to compute recommendations" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
