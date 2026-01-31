@@ -3,7 +3,7 @@ import { getToken } from "next-auth/jwt";
 import { NextRequest } from "next/server";
 
 export async function POST(req: NextRequest) {
-  const token = await getToken({ req });
+  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
   if (!token) {
     return new Response("Unauthorized", { status: 401 });
   }

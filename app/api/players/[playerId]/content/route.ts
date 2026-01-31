@@ -3,7 +3,7 @@ import { getToken } from "next-auth/jwt";
 import { sql } from "@/db";
 
 async function assertOwnsPlayer(req: NextRequest, playerId: string) {
-  const token = await getToken({ req });
+  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
   const parentId = token?.sub;
   if (!parentId)
     return {

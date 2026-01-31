@@ -30,7 +30,15 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function PlayerGoals({ playerId }: { playerId: string }) {
+export function PlayerGoals({ 
+  playerId,
+  isAdminMode,
+  securityCode
+}: { 
+  playerId: string;
+  isAdminMode?: boolean;
+  securityCode?: string;
+}) {
   const [goals, setGoals] = useState<PlayerGoal[]>([]);
   const [goalDrafts, setGoalDrafts] = useState<
     Record<string, { name: string; due_date: string }>
@@ -42,9 +50,15 @@ export function PlayerGoals({ playerId }: { playerId: string }) {
   const [isPending, startTransition] = useTransition();
 
   async function load() {
-    const data = await jsonFetch<{ goals: PlayerGoal[] }>(
-      `/api/players/${playerId}/goals`
-    );
+    const endpoint = isAdminMode 
+      ? `/api/admin/players/${playerId}/goals`
+      : `/api/players/${playerId}/goals`;
+    
+    const headers: HeadersInit = isAdminMode && securityCode
+      ? { "x-security-code": securityCode }
+      : {};
+    
+    const data = await jsonFetch<{ goals: PlayerGoal[] }>(endpoint, { headers });
     setGoals(data.goals ?? []);
     setGoalDrafts((prev) => {
       const next = { ...prev };
@@ -70,7 +84,7 @@ export function PlayerGoals({ playerId }: { playerId: string }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerId]);
+  }, [playerId, isAdminMode, securityCode]);
 
   const { todo, done } = useMemo(() => {
     const t = goals.filter((g) => !g.completed);

@@ -11,9 +11,11 @@ type TabType = "tests" | "goals" | "sessions" | "videos" | "uploads";
 
 interface PlayerContentTabsProps {
   playerId: string;
+  isAdminMode?: boolean;
+  securityCode?: string;
 }
 
-export default function PlayerContentTabs({ playerId }: PlayerContentTabsProps) {
+export default function PlayerContentTabs({ playerId, isAdminMode, securityCode }: PlayerContentTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>("tests");
 
   return (
@@ -74,9 +76,9 @@ export default function PlayerContentTabs({ playerId }: PlayerContentTabsProps) 
 
       {/* Tab Content */}
       <div className="mt-6">
-        {activeTab === "tests" && <PlayerInsights playerId={playerId} />}
-        {activeTab === "goals" && <PlayerGoals playerId={playerId} />}
-        {activeTab === "sessions" && <PlayerSessions playerId={playerId} />}
+        {activeTab === "tests" && <PlayerInsights playerId={playerId} isAdminMode={isAdminMode} securityCode={securityCode} />}
+        {activeTab === "goals" && <PlayerGoals playerId={playerId} isAdminMode={isAdminMode} securityCode={securityCode} />}
+        {activeTab === "sessions" && <PlayerSessions playerId={playerId} isAdminMode={isAdminMode} securityCode={securityCode} />}
         {activeTab === "videos" && <PlayerVideos playerId={playerId} />}
         {activeTab === "uploads" && <PlayerUploads playerId={playerId} />}
       </div>

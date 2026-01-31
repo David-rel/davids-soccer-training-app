@@ -371,7 +371,7 @@ export default function AdminPreviewClient(props: {
           </div>
 
           {/* Section 2: Tabbed Content */}
-          <PlayerContentTabs playerId={player.id} />
+          <PlayerContentTabs playerId={player.id} isAdminMode={true} securityCode={securityCode} />
         </div>
       </main>
 

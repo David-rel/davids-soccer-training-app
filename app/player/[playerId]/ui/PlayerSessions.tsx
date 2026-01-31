@@ -16,7 +16,15 @@ type PlayerSession = {
   created_at: string;
 };
 
-export function PlayerSessions({ playerId }: { playerId: string }) {
+export function PlayerSessions({ 
+  playerId, 
+  isAdminMode,
+  securityCode 
+}: { 
+  playerId: string;
+  isAdminMode?: boolean;
+  securityCode?: string;
+}) {
   const [sessions, setSessions] = useState<PlayerSession[]>([]);
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -26,8 +34,18 @@ export function PlayerSessions({ playerId }: { playerId: string }) {
     try {
       setError(null);
       setLoading(true);
-      const res = await fetch(`/api/players/${playerId}/sessions`, {
+      
+      const endpoint = isAdminMode 
+        ? `/api/admin/players/${playerId}/sessions`
+        : `/api/players/${playerId}/sessions`;
+      
+      const headers: HeadersInit = isAdminMode && securityCode
+        ? { "x-security-code": securityCode }
+        : {};
+      
+      const res = await fetch(endpoint, {
         cache: "no-store",
+        headers,
       });
       if (!res.ok) {
         const errorText = await res.text();
@@ -57,7 +75,7 @@ export function PlayerSessions({ playerId }: { playerId: string }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerId]);
+  }, [playerId, isAdminMode, securityCode]);
 
   return (
     <div className="space-y-4">

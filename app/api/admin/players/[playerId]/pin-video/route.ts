@@ -5,7 +5,7 @@ import { sql } from "@/db";
 export const dynamic = "force-dynamic";
 
 async function assertIsAdmin(req: NextRequest) {
-  const token = await getToken({ req });
+  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
   const userId = token?.sub;
   if (!userId) {
     return { ok: false as const, res: new Response("Unauthorized", { status: 401 }) };

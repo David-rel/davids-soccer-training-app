@@ -982,7 +982,15 @@ function MetricCard({
   );
 }
 
-export function PlayerInsights({ playerId }: { playerId: string }) {
+export function PlayerInsights({ 
+  playerId,
+  isAdminMode,
+  securityCode
+}: { 
+  playerId: string;
+  isAdminMode?: boolean;
+  securityCode?: string;
+}) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [tests, setTests] = useState<PlayerTest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -992,9 +1000,20 @@ export function PlayerInsights({ playerId }: { playerId: string }) {
     async function run() {
       setLoading(true);
       try {
+        const profilesEndpoint = isAdminMode 
+          ? `/api/admin/players/${playerId}/profiles`
+          : `/api/players/${playerId}/profiles`;
+        const testsEndpoint = isAdminMode
+          ? `/api/admin/players/${playerId}/tests`
+          : `/api/players/${playerId}/tests`;
+        
+        const headers: HeadersInit = isAdminMode && securityCode
+          ? { "x-security-code": securityCode }
+          : {};
+        
         const [profilesRes, testsRes] = await Promise.all([
-          fetch(`/api/players/${playerId}/profiles`, { cache: "no-store" }),
-          fetch(`/api/players/${playerId}/tests`, { cache: "no-store" }),
+          fetch(profilesEndpoint, { cache: "no-store", headers }),
+          fetch(testsEndpoint, { cache: "no-store", headers }),
         ]);
 
         if (profilesRes.ok) {
@@ -1014,7 +1033,7 @@ export function PlayerInsights({ playerId }: { playerId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [playerId]);
+  }, [playerId, isAdminMode, securityCode]);
 
   const latest = profiles.length ? profiles[profiles.length - 1] : null;
   const rawTests = latest?.data?.raw_tests ?? [];

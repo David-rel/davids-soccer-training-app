@@ -17,7 +17,7 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ playerId: string }> },
 ) {
-  const token = await getToken({ req });
+  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
   const parentId = token?.sub;
   if (!parentId) return new Response("Unauthorized", { status: 401 });
 
