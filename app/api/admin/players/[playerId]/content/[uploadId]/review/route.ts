@@ -6,7 +6,7 @@ export async function PATCH(
   req: NextRequest,
   ctx: { params: Promise<{ playerId: string; uploadId: string }> }
 ) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { playerId, uploadId } = await ctx.params;

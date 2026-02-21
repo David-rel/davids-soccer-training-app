@@ -42,10 +42,7 @@ export default function VideoReportsPage() {
 
   async function loadReports(status: string) {
     try {
-      const securityCode = localStorage.getItem("adminSecurityCode") || "";
-      const res = await fetch(`/api/admin/video-reports?status=${status}`, {
-        headers: { "x-security-code": securityCode },
-      });
+      const res = await fetch(`/api/admin/video-reports?status=${status}`);
 
       if (res.ok) {
         const data = await res.json();
@@ -59,10 +56,7 @@ export default function VideoReportsPage() {
 
   async function loadRatedVideos() {
     try {
-      const securityCode = localStorage.getItem("adminSecurityCode") || "";
-      const res = await fetch("/api/admin/video-ratings", {
-        headers: { "x-security-code": securityCode },
-      });
+      const res = await fetch("/api/admin/video-ratings");
 
       if (res.ok) {
         const data = await res.json();
@@ -98,12 +92,10 @@ export default function VideoReportsPage() {
   ) {
     setUpdating(reportId);
     try {
-      const securityCode = localStorage.getItem("adminSecurityCode") || "";
       const res = await fetch("/api/admin/video-reports", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          "x-security-code": securityCode,
         },
         body: JSON.stringify({ reportId, status, action }),
       });
@@ -132,7 +124,7 @@ export default function VideoReportsPage() {
             </p>
           </div>
           <Link
-            href="/admin"
+            href="/admin/videos"
             className="rounded-lg bg-gray-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-700"
           >
             ← Back to Admin

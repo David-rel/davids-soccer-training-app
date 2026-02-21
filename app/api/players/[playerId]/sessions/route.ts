@@ -8,6 +8,7 @@ type PlayerSessionParentRow = {
   player_id: string;
   session_date: string; // YYYY-MM-DD
   title: string;
+  document_upload_url: string | null;
   session_plan: string | null;
   focus_areas: string | null;
   activities: string | null;
@@ -59,6 +60,7 @@ export async function GET(
       player_id,
       session_date::text AS session_date,
       title,
+      document_upload_url,
       session_plan,
       focus_areas,
       activities,

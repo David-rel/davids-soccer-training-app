@@ -8,6 +8,7 @@ type PlayerSessionRow = {
   player_id: string;
   session_date: string; // YYYY-MM-DD
   title: string;
+  document_upload_url: string | null;
   session_plan: string | null;
   focus_areas: string | null;
   activities: string | null;
@@ -32,7 +33,7 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ playerId: string }> }
 ) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { playerId } = await ctx.params;
@@ -43,6 +44,7 @@ export async function GET(
       player_id,
       session_date::text AS session_date,
       title,
+      document_upload_url,
       session_plan,
       focus_areas,
       activities,
@@ -66,7 +68,7 @@ export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ playerId: string }> }
 ) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { playerId } = await ctx.params;
@@ -74,6 +76,7 @@ export async function POST(
   const body = (await req.json().catch(() => null)) as {
     session_date?: string;
     title?: string;
+    document_upload_url?: string | null;
     session_plan?: string | null;
     focus_areas?: string | null;
     activities?: string | null;
@@ -91,6 +94,7 @@ export async function POST(
   }
 
   const sessionPlan = body?.session_plan?.trim() || null;
+  const documentUploadUrl = body?.document_upload_url?.trim() || null;
   const focusAreas = body?.focus_areas?.trim() || null;
   const activities = body?.activities?.trim() || null;
   const thingsToTry = body?.things_to_try?.trim() || null;
@@ -102,6 +106,7 @@ export async function POST(
       player_id,
       session_date,
       title,
+      document_upload_url,
       session_plan,
       focus_areas,
       activities,
@@ -115,20 +120,22 @@ export async function POST(
       ${playerId},
       ${sessionDate}::date,
       ${title},
+      ${documentUploadUrl},
       ${sessionPlan},
       ${focusAreas},
       ${activities},
       ${thingsToTry},
       ${notes},
       ${adminNotes},
-      false,
-      NULL
+      true,
+      now()
     )
     RETURNING
       id,
       player_id,
       session_date::text AS session_date,
       title,
+      document_upload_url,
       session_plan,
       focus_areas,
       activities,

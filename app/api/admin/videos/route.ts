@@ -20,7 +20,7 @@ type VideoRow = {
 };
 
 export async function GET(req: NextRequest) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { searchParams } = new URL(req.url);
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const body = (await req.json().catch(() => null)) as {

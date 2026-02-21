@@ -984,12 +984,10 @@ function MetricCard({
 
 export function PlayerInsights({ 
   playerId,
-  isAdminMode,
-  securityCode
+  isAdminMode
 }: { 
   playerId: string;
   isAdminMode?: boolean;
-  securityCode?: string;
 }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [tests, setTests] = useState<PlayerTest[]>([]);
@@ -1007,13 +1005,9 @@ export function PlayerInsights({
           ? `/api/admin/players/${playerId}/tests`
           : `/api/players/${playerId}/tests`;
         
-        const headers: HeadersInit = isAdminMode && securityCode
-          ? { "x-security-code": securityCode }
-          : {};
-        
         const [profilesRes, testsRes] = await Promise.all([
-          fetch(profilesEndpoint, { cache: "no-store", headers }),
-          fetch(testsEndpoint, { cache: "no-store", headers }),
+          fetch(profilesEndpoint, { cache: "no-store" }),
+          fetch(testsEndpoint, { cache: "no-store" }),
         ]);
 
         if (profilesRes.ok) {
@@ -1033,7 +1027,7 @@ export function PlayerInsights({
     return () => {
       cancelled = true;
     };
-  }, [playerId, isAdminMode, securityCode]);
+  }, [playerId, isAdminMode]);
 
   const latest = profiles.length ? profiles[profiles.length - 1] : null;
   const rawTests = latest?.data?.raw_tests ?? [];

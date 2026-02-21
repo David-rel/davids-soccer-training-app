@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { VideoCard } from "@/app/ui/VideoCard";
 
 type Video = {
   id: string;
@@ -19,7 +18,7 @@ type Video = {
   created_at: string;
 };
 
-export function AdminVideos({ securityCode }: { securityCode: string }) {
+export function AdminVideos() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +54,6 @@ export function AdminVideos({ securityCode }: { securityCode: string }) {
           ? "/api/admin/videos"
           : `/api/admin/videos?published=${filter}`;
       const res = await fetch(url, {
-        headers: { "x-security-code": securityCode },
         cache: "no-store",
       });
       if (!res.ok) {
@@ -74,7 +72,7 @@ export function AdminVideos({ securityCode }: { securityCode: string }) {
   useEffect(() => {
     loadVideos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, securityCode]);
+  }, [filter]);
 
   async function handleAddVideo(e: React.FormEvent) {
     e.preventDefault();
@@ -88,7 +86,6 @@ export function AdminVideos({ securityCode }: { securityCode: string }) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-security-code": securityCode,
         },
         body: JSON.stringify({
           title: newTitle,
@@ -125,7 +122,6 @@ export function AdminVideos({ securityCode }: { securityCode: string }) {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          "x-security-code": securityCode,
         },
         body: JSON.stringify({ published: !currentPublished }),
       });
@@ -147,7 +143,6 @@ export function AdminVideos({ securityCode }: { securityCode: string }) {
     try {
       const res = await fetch(`/api/admin/videos/${videoId}`, {
         method: "DELETE",
-        headers: { "x-security-code": securityCode },
       });
 
       if (!res.ok) {

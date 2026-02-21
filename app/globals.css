@@ -24,3 +24,123 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Ensure all form inputs have readable dark text on light backgrounds. */
+input,
+textarea,
+select,
+option {
+  color: #111827;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #6b7280;
+}
+
+.feedback-markdown h1,
+.feedback-markdown h2,
+.feedback-markdown h3,
+.feedback-markdown h4,
+.feedback-markdown h5,
+.feedback-markdown h6 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #111827;
+}
+
+.feedback-markdown h1 {
+  font-size: 1.5rem;
+}
+
+.feedback-markdown h2 {
+  font-size: 1.25rem;
+}
+
+.feedback-markdown h3 {
+  font-size: 1.125rem;
+}
+
+.feedback-markdown p {
+  margin: 0.5rem 0;
+}
+
+.feedback-markdown ul,
+.feedback-markdown ol {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.feedback-markdown ul {
+  list-style-type: disc;
+}
+
+.feedback-markdown ol {
+  list-style-type: decimal;
+}
+
+.feedback-markdown li {
+  margin: 0.25rem 0;
+}
+
+.feedback-markdown table {
+  width: 100%;
+  margin: 0.75rem 0;
+  border-collapse: collapse;
+  overflow: hidden;
+  border: 1px solid #d1d5db;
+  border-radius: 0.75rem;
+}
+
+.feedback-markdown th,
+.feedback-markdown td {
+  border: 1px solid #d1d5db;
+  padding: 0.5rem 0.625rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.feedback-markdown th {
+  background: #ecfdf5;
+  font-weight: 700;
+}
+
+.feedback-markdown blockquote {
+  margin: 0.75rem 0;
+  border-left: 3px solid #34d399;
+  padding-left: 0.75rem;
+  color: #374151;
+}
+
+.feedback-markdown code {
+  border-radius: 0.375rem;
+  background: #f3f4f6;
+  padding: 0.125rem 0.3125rem;
+  font-size: 0.875em;
+}
+
+.feedback-markdown pre {
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  background: #111827;
+  padding: 0.75rem;
+  color: #f9fafb;
+}
+
+.feedback-markdown pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.feedback-markdown strong {
+  font-weight: 700;
+  color: #111827;
+}
+
+.feedback-markdown a {
+  color: #047857;
+  text-decoration: underline;
+}

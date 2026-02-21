@@ -8,6 +8,7 @@ import { sql } from "@/db";
 import { SignOutButton } from "@/app/ui/SignOutButton";
 import { PlayerEditor } from "@/app/player/[playerId]/ui/PlayerEditor";
 import PlayerContentTabs from "@/app/player/[playerId]/ui/PlayerContentTabs";
+import { PlayerFeedbackSection } from "@/app/player/[playerId]/ui/PlayerFeedbackSection";
 import { ChatWrapper } from "@/app/player/[playerId]/ui/ChatWrapper";
 
 type PlayerRow = {
@@ -182,6 +183,8 @@ export default async function PlayerPage(props: {
               </div>
             </div>
           </div>
+
+          <PlayerFeedbackSection playerId={player.id} />
 
           {/* Section 2: Tabbed Content */}
           <PlayerContentTabs playerId={player.id} />

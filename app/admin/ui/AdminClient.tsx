@@ -34,13 +34,12 @@ type Player = {
 
 async function api<T>(
   path: string,
-  opts: RequestInit & { securityCode: string }
+  opts: RequestInit & { securityCode?: string }
 ): Promise<T> {
   const res = await fetch(path, {
     ...opts,
     headers: {
       "content-type": "application/json",
-      "x-security-code": opts.securityCode,
       ...(opts.headers ?? {}),
     },
   });
@@ -85,7 +84,7 @@ function Field({
 
 export default function AdminClient() {
   const [securityCode, setSecurityCode] = useState("");
-  const [authorized, setAuthorized] = useState(false);
+  const [authorized, setAuthorized] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
   const [parents, setParents] = useState<Parent[]>([]);
@@ -171,11 +170,11 @@ export default function AdminClient() {
   }
 
   useEffect(() => {
-    // Always require the code after a refresh: we do NOT persist securityCode.
-    setAuthorized(false);
     setParents([]);
     setPlayersByParent({});
     setSelectedParentId("");
+    void refreshAll(securityCode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function refreshAll(code: string) {
@@ -212,22 +211,6 @@ export default function AdminClient() {
             </div>
           </div>
 
-          {authorized && (
-            <button
-              type="button"
-              onClick={() => {
-                // “Every refresh requires code” also means easy lock.
-                setAuthorized(false);
-                setSecurityCode("");
-                setParents([]);
-                setPlayersByParent({});
-                setSelectedParentId("");
-              }}
-              className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800"
-            >
-              Lock
-            </button>
-          )}
         </div>
       </header>
 
@@ -655,7 +638,7 @@ export default function AdminClient() {
         {/* Video Management Section */}
         {authorized && (
           <div className="mt-6">
-            <AdminVideos securityCode={securityCode} />
+            <AdminVideos />
           </div>
         )}
       </main>

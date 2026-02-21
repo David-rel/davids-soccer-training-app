@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import PlayerContentTabs from "@/app/player/[playerId]/ui/PlayerContentTabs";
+import { PlayerFeedbackSection } from "@/app/player/[playerId]/ui/PlayerFeedbackSection";
 import { ChatWrapper } from "@/app/player/[playerId]/ui/ChatWrapper";
 
 type Player = {
@@ -23,8 +24,6 @@ type Player = {
 export default function AdminPreviewClient(props: {
   params: Promise<{ playerId: string }>;
 }) {
-  const [securityCode, setSecurityCode] = useState("");
-  const [authorized, setAuthorized] = useState(false);
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,17 +35,10 @@ export default function AdminPreviewClient(props: {
 
   useEffect(() => {
     if (!playerId) return;
-    
-    const saved = localStorage.getItem("adminSecurityCode");
-    if (saved) {
-      setSecurityCode(saved);
-      loadData(saved);
-    } else {
-      setLoading(false);
-    }
+    void loadData();
   }, [playerId]);
 
-  async function loadData(code: string) {
+  async function loadData() {
     if (!playerId) {
       setError("No player ID found");
       return;
@@ -56,26 +48,8 @@ export default function AdminPreviewClient(props: {
     setLoading(true);
 
     try {
-      // Verify admin code
-      const verifyRes = await fetch("/api/admin/verify", {
-        method: "GET",
-        headers: {
-          "x-security-code": code,
-        },
-      });
-
-      if (!verifyRes.ok) {
-        const errorText = await verifyRes.text();
-        throw new Error(errorText || "Invalid security code");
-      }
-
-      setAuthorized(true);
-      localStorage.setItem("adminSecurityCode", code);
-
       // Fetch player data
-      const playerRes = await fetch(`/api/admin/players/${playerId}`, {
-        headers: { "x-security-code": code },
-      });
+      const playerRes = await fetch(`/api/admin/players/${playerId}`);
 
       if (!playerRes.ok) {
         const text = await playerRes.text();
@@ -86,8 +60,6 @@ export default function AdminPreviewClient(props: {
       setPlayer(playerData.player);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load data");
-      setAuthorized(false);
-      localStorage.removeItem("adminSecurityCode");
     } finally {
       setLoading(false);
     }
@@ -101,79 +73,10 @@ export default function AdminPreviewClient(props: {
     );
   }
 
-  if (!authorized) {
-    return (
-      <div className="min-h-screen bg-emerald-50">
-        <header className="border-b border-emerald-200 bg-white">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-            <div className="flex items-center gap-3">
-              <Image
-                src="/icon.png"
-                alt="Admin"
-                width={40}
-                height={40}
-                className="h-10 w-10 rounded-xl"
-              />
-              <div className="text-sm font-semibold text-gray-900">
-                Admin • Parent View Preview
-              </div>
-            </div>
-            <Link
-              href={`/admin/player/${playerId}`}
-              className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:border-emerald-300"
-            >
-              Back to admin
-            </Link>
-          </div>
-        </header>
-
-        <main className="mx-auto max-w-md px-6 py-10">
-          <div className="rounded-3xl border border-emerald-200 bg-white/90 p-6 shadow-sm backdrop-blur">
-            <h1 className="text-xl font-semibold text-gray-900">
-              Enter security code
-            </h1>
-            <p className="mt-1 text-sm text-gray-600">
-              Required to preview parent view.
-            </p>
-
-            {error && (
-              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-                {error}
-              </div>
-            )}
-
-            <div className="mt-6 space-y-3">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700">SECURITY_CODE</label>
-                <input
-                  type="password"
-                  value={securityCode}
-                  onChange={(e) => setSecurityCode(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") loadData(securityCode);
-                  }}
-                  placeholder="Enter code"
-                  className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 placeholder:text-gray-500 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => loadData(securityCode)}
-                className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
-              >
-                Enter
-              </button>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
   if (!player) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-emerald-50">
-        <div className="text-sm text-gray-600">Player not found</div>
+        <div className="text-sm text-gray-600">{error ?? "Player not found"}</div>
       </div>
     );
   }
@@ -210,15 +113,6 @@ export default function AdminPreviewClient(props: {
               >
                 Back to admin
               </Link>
-              <button
-                onClick={() => {
-                  setAuthorized(false);
-                  localStorage.removeItem("adminSecurityCode");
-                }}
-                className="rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/15"
-              >
-                Lock
-              </button>
             </div>
           </div>
         </div>
@@ -370,8 +264,10 @@ export default function AdminPreviewClient(props: {
             </div>
           </div>
 
+          <PlayerFeedbackSection playerId={player.id} isAdminMode />
+
           {/* Section 2: Tabbed Content */}
-          <PlayerContentTabs playerId={player.id} isAdminMode={true} securityCode={securityCode} />
+          <PlayerContentTabs playerId={player.id} isAdminMode={true} />
         </div>
       </main>
 

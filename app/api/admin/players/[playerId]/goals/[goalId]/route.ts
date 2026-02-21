@@ -27,7 +27,7 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ playerId: string; goalId: string }> }
 ) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { playerId, goalId } = await ctx.params;
@@ -58,7 +58,7 @@ export async function PATCH(
   req: NextRequest,
   ctx: { params: Promise<{ playerId: string; goalId: string }> }
 ) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { playerId, goalId } = await ctx.params;
@@ -127,7 +127,7 @@ export async function DELETE(
   req: NextRequest,
   ctx: { params: Promise<{ playerId: string; goalId: string }> }
 ) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { playerId, goalId } = await ctx.params;

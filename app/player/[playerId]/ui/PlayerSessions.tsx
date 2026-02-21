@@ -7,6 +7,7 @@ type PlayerSession = {
   player_id: string;
   session_date: string; // YYYY-MM-DD
   title: string;
+  document_upload_url: string | null;
   session_plan: string | null;
   focus_areas: string | null;
   activities: string | null;
@@ -16,14 +17,26 @@ type PlayerSession = {
   created_at: string;
 };
 
+function getFileNameFromUrl(url: string) {
+  try {
+    const pathname = new URL(url).pathname;
+    const raw = pathname.split("/").pop() || "session.pdf";
+    return decodeURIComponent(raw);
+  } catch {
+    return "session.pdf";
+  }
+}
+
+function isPdfUrl(url: string) {
+  return /\.pdf(?:$|[?#])/i.test(url);
+}
+
 export function PlayerSessions({ 
   playerId, 
-  isAdminMode,
-  securityCode 
+  isAdminMode
 }: { 
   playerId: string;
   isAdminMode?: boolean;
-  securityCode?: string;
 }) {
   const [sessions, setSessions] = useState<PlayerSession[]>([]);
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set());
@@ -39,13 +52,8 @@ export function PlayerSessions({
         ? `/api/admin/players/${playerId}/sessions`
         : `/api/players/${playerId}/sessions`;
       
-      const headers: HeadersInit = isAdminMode && securityCode
-        ? { "x-security-code": securityCode }
-        : {};
-      
       const res = await fetch(endpoint, {
         cache: "no-store",
-        headers,
       });
       if (!res.ok) {
         const errorText = await res.text();
@@ -75,7 +83,7 @@ export function PlayerSessions({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerId, isAdminMode, securityCode]);
+  }, [playerId, isAdminMode]);
 
   return (
     <div className="space-y-4">
@@ -113,6 +121,17 @@ export function PlayerSessions({
         <div className="mt-5 space-y-3">
           {sessions.map((s) => {
             const isExpanded = expandedSessionIds.has(s.id);
+            const hasWrittenContent = Boolean(
+              s.session_plan ||
+                s.focus_areas ||
+                s.activities ||
+                s.things_to_try ||
+                s.notes,
+            );
+            const hasPdf = Boolean(s.document_upload_url);
+            const sessionPdfUrl = s.document_upload_url ?? "";
+            const sessionPdfName = hasPdf ? getFileNameFromUrl(sessionPdfUrl) : "";
+            const showPdfPreview = hasPdf && isPdfUrl(sessionPdfUrl);
             const toggleExpanded = () => {
               setExpandedSessionIds((prev) => {
                 const next = new Set(prev);
@@ -205,6 +224,48 @@ export function PlayerSessions({
                         </div>
                         <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
                           {s.notes}
+                        </div>
+                      </div>
+                    )}
+
+                    {hasPdf && (
+                      <div className="mt-4 rounded-2xl border border-emerald-200 bg-white p-4">
+                        <div className="text-sm font-semibold text-gray-900">
+                          Session PDF
+                        </div>
+                        <div className="mt-1 text-xs font-medium text-gray-600">
+                          {sessionPdfName}
+                        </div>
+                        {!hasWrittenContent && (
+                          <p className="mt-2 text-sm text-gray-700">
+                            This session is shared as a PDF document.
+                          </p>
+                        )}
+                        {showPdfPreview && (
+                          <div className="mt-3 overflow-hidden rounded-xl border border-emerald-100 bg-gray-50">
+                            <iframe
+                              title={`Session PDF preview for ${s.title}`}
+                              src={`${sessionPdfUrl}#view=FitH`}
+                              className="h-56 w-full bg-white"
+                            />
+                          </div>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-3">
+                          <a
+                            href={sessionPdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-xl bg-emerald-600 px-5 py-2.5 text-base font-semibold text-white transition hover:bg-emerald-700"
+                          >
+                            View PDF
+                          </a>
+                          <a
+                            href={sessionPdfUrl}
+                            download={sessionPdfName}
+                            className="rounded-xl border border-emerald-300 bg-white px-5 py-2.5 text-base font-semibold text-emerald-800 transition hover:border-emerald-400"
+                          >
+                            Download PDF
+                          </a>
                         </div>
                       </div>
                     )}

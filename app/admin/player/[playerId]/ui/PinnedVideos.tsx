@@ -32,10 +32,7 @@ export function PinnedVideos({ playerId }: { playerId: string }) {
 
   async function loadPins() {
     try {
-      const securityCode = localStorage.getItem("adminSecurityCode") || "";
-      const res = await fetch(`/api/admin/players/${playerId}/pin-video`, {
-        headers: { "x-security-code": securityCode },
-      });
+      const res = await fetch(`/api/admin/players/${playerId}/pin-video`);
 
       if (res.ok) {
         const data = await res.json();
@@ -68,12 +65,10 @@ export function PinnedVideos({ playerId }: { playerId: string }) {
 
     setLoading(true);
     try {
-      const securityCode = localStorage.getItem("adminSecurityCode") || "";
       const res = await fetch(`/api/admin/players/${playerId}/pin-video`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-security-code": securityCode,
         },
         body: JSON.stringify({
           videoId: selectedVideo,
@@ -98,12 +93,10 @@ export function PinnedVideos({ playerId }: { playerId: string }) {
 
   async function handleUnpin(videoId: string) {
     try {
-      const securityCode = localStorage.getItem("adminSecurityCode") || "";
       const res = await fetch(
         `/api/admin/players/${playerId}/pin-video?videoId=${videoId}`,
         {
           method: "DELETE",
-          headers: { "x-security-code": securityCode },
         }
       );
 

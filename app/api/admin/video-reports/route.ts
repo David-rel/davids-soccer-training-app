@@ -1,28 +1,13 @@
 import { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { sql } from "@/db";
+import { assertAdmin, getAdminActorId } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
 
-async function assertIsAdmin(req: NextRequest) {
-  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
-  const userId = token?.sub;
-  if (!userId) {
-    return { ok: false as const, res: new Response("Unauthorized", { status: 401 }) };
-  }
-
-  const securityCode = req.headers.get("x-security-code");
-  if (securityCode !== process.env.SECURITY_CODE) {
-    return { ok: false as const, res: new Response("Forbidden", { status: 403 }) };
-  }
-
-  return { ok: true as const, userId };
-}
-
 // GET all video reports
 export async function GET(req: NextRequest) {
-  const auth = await assertIsAdmin(req);
-  if (!auth.ok) return auth.res;
+  const err = await assertAdmin(req);
+  if (err) return err;
 
   try {
     const { searchParams } = new URL(req.url);
@@ -64,10 +49,13 @@ export async function GET(req: NextRequest) {
 
 // PATCH to update report status
 export async function PATCH(req: NextRequest) {
-  const auth = await assertIsAdmin(req);
-  if (!auth.ok) return auth.res;
+  const err = await assertAdmin(req);
+  if (err) return err;
 
   try {
+    const userId = await getAdminActorId(req);
+    if (!userId) return new Response("Unauthorized", { status: 401 });
+
     const body = await req.json();
     const { reportId, status, action } = body;
 
@@ -90,7 +78,7 @@ export async function PATCH(req: NextRequest) {
       SET
         status = ${status},
         resolved_at = ${status === "resolved" || status === "dismissed" ? now : null},
-        resolved_by = ${auth.userId}
+        resolved_by = ${userId}
       WHERE id = ${reportId}
     `;
 

@@ -23,7 +23,7 @@ export async function PATCH(
   req: NextRequest,
   ctx: { params: Promise<{ videoId: string }> }
 ) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { videoId } = await ctx.params;
@@ -138,7 +138,7 @@ export async function DELETE(
   req: NextRequest,
   ctx: { params: Promise<{ videoId: string }> }
 ) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { videoId } = await ctx.params;

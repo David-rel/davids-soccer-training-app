@@ -26,7 +26,7 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ parentId: string }> }
 ) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { parentId } = await ctx.params;
@@ -61,7 +61,7 @@ export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ parentId: string }> }
 ) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { parentId } = await ctx.params;

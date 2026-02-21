@@ -10,6 +10,7 @@ type ParentRow = {
   email: string | null;
   phone: string | null;
   password_hash: string;
+  is_admin: boolean;
 };
 
 export const authOptions: NextAuthOptions = {
@@ -32,8 +33,8 @@ export const authOptions: NextAuthOptions = {
         if (!isEmail && !phoneLookup) return null;
 
         const rows = (isEmail
-          ? await sql`SELECT id, email, phone, password_hash FROM parents WHERE lower(email) = lower(${identifier}) LIMIT 1`
-          : await sql`SELECT id, email, phone, password_hash FROM parents WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${phoneLookup} LIMIT 1`) as unknown as ParentRow[];
+          ? await sql`SELECT id, email, phone, password_hash, is_admin FROM parents WHERE lower(email) = lower(${identifier}) LIMIT 1`
+          : await sql`SELECT id, email, phone, password_hash, is_admin FROM parents WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${phoneLookup} LIMIT 1`) as unknown as ParentRow[];
 
         const parent = rows[0];
         if (!parent) return null;
@@ -45,6 +46,7 @@ export const authOptions: NextAuthOptions = {
           id: parent.id,
           email: parent.email ?? undefined,
           name: parent.email ?? parent.phone ?? "Parent",
+          isAdmin: parent.is_admin,
         };
       },
     }),
@@ -54,9 +56,16 @@ export const authOptions: NextAuthOptions = {
     signIn: "/",
   },
   callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.isAdmin = Boolean(user.isAdmin);
+      }
+      return token;
+    },
     async session({ session, token }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
+        session.user.isAdmin = token.isAdmin === true;
       }
       return session;
     },

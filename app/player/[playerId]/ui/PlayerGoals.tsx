@@ -32,12 +32,10 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function PlayerGoals({ 
   playerId,
-  isAdminMode,
-  securityCode
+  isAdminMode
 }: { 
   playerId: string;
   isAdminMode?: boolean;
-  securityCode?: string;
 }) {
   const [goals, setGoals] = useState<PlayerGoal[]>([]);
   const [goalDrafts, setGoalDrafts] = useState<
@@ -54,11 +52,7 @@ export function PlayerGoals({
       ? `/api/admin/players/${playerId}/goals`
       : `/api/players/${playerId}/goals`;
     
-    const headers: HeadersInit = isAdminMode && securityCode
-      ? { "x-security-code": securityCode }
-      : {};
-    
-    const data = await jsonFetch<{ goals: PlayerGoal[] }>(endpoint, { headers });
+    const data = await jsonFetch<{ goals: PlayerGoal[] }>(endpoint);
     setGoals(data.goals ?? []);
     setGoalDrafts((prev) => {
       const next = { ...prev };
@@ -84,7 +78,7 @@ export function PlayerGoals({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerId, isAdminMode, securityCode]);
+  }, [playerId, isAdminMode]);
 
   const { todo, done } = useMemo(() => {
     const t = goals.filter((g) => !g.completed);

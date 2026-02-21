@@ -19,14 +19,12 @@ type PlayerVideoUpload = {
 type Props = {
   playerId: string;
   submissions: PlayerVideoUpload[];
-  securityCode: string;
   onReload: () => void;
 };
 
 export function ContentSubmissionsSection({
   playerId,
   submissions,
-  securityCode,
   onReload,
 }: Props) {
   const [isPending, startTransition] = useTransition();
@@ -148,7 +146,6 @@ export function ContentSubmissionsSection({
             method: "PATCH",
             headers: {
               "content-type": "application/json",
-              "x-security-code": securityCode,
             },
             body: JSON.stringify({
               coach_video_response_url: form.videoUrl || null,

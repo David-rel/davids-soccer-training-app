@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { TEST_DEFINITIONS } from "@/lib/testDefinitions";
+import { FeedbackMarkdown } from "@/app/ui/FeedbackMarkdown";
+import { formatFeedbackTitleForDisplay } from "@/lib/feedbackTitle";
 import { PinnedVideos } from "./PinnedVideos";
 import { ContentSubmissionsSection } from "./ContentSubmissionsSection";
 
@@ -62,6 +64,7 @@ type PlayerSession = {
   player_id: string;
   session_date: string; // YYYY-MM-DD
   title: string;
+  document_upload_url: string | null;
   session_plan: string | null;
   focus_areas: string | null;
   activities: string | null;
@@ -88,15 +91,25 @@ type PlayerVideoUpload = {
   updated_at: string;
 };
 
+type PlayerFeedback = {
+  id: string;
+  player_id: string | null;
+  title: string;
+  raw_content: string;
+  cleaned_markdown_content: string | null;
+  public: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 async function api<T>(
   path: string,
-  opts: RequestInit & { securityCode: string },
+  opts: RequestInit & { securityCode?: string },
 ): Promise<T> {
   const res = await fetch(path, {
     ...opts,
     headers: {
       "content-type": "application/json",
-      "x-security-code": opts.securityCode,
       ...(opts.headers ?? {}),
     },
     cache: "no-store",
@@ -185,13 +198,19 @@ function calcBirthMeta(birthdate: string | null | undefined) {
   return { age, birthYear, ageGroup };
 }
 
+function formatDateLabel(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString();
+}
+
 export default function AdminPlayerClient(props: {
   params: Promise<{ playerId: string }>;
 }) {
   const [isPending, startTransition] = useTransition();
 
   const [securityCode, setSecurityCode] = useState("");
-  const [authorized, setAuthorized] = useState(false);
+  const [authorized, setAuthorized] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
   const [playerId, setPlayerId] = useState<string | null>(null);
@@ -232,6 +251,18 @@ export default function AdminPlayerClient(props: {
   const [contentSubmissions, setContentSubmissions] = useState<
     PlayerVideoUpload[]
   >([]);
+  const [feedbackEntries, setFeedbackEntries] = useState<PlayerFeedback[]>([]);
+  const [selectedFeedbackId, setSelectedFeedbackId] = useState<string | null>(
+    null,
+  );
+  const [newFeedbackRawContent, setNewFeedbackRawContent] = useState("");
+  const [creatingFeedback, setCreatingFeedback] = useState(false);
+  const [deletingFeedbackId, setDeletingFeedbackId] = useState<string | null>(
+    null,
+  );
+  const [recleaningFeedbackId, setRecleaningFeedbackId] = useState<
+    string | null
+  >(null);
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(
     new Set(),
   );
@@ -243,6 +274,9 @@ export default function AdminPlayerClient(props: {
   const [newSessionThingsToTry, setNewSessionThingsToTry] = useState("");
   const [newSessionNotes, setNewSessionNotes] = useState("");
   const [newSessionAdminNotes, setNewSessionAdminNotes] = useState("");
+  const [newSessionDocumentUrl, setNewSessionDocumentUrl] = useState("");
+  const [newSessionUploadingDocument, setNewSessionUploadingDocument] =
+    useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editSessionTitle, setEditSessionTitle] = useState("");
   const [editSessionDate, setEditSessionDate] = useState("");
@@ -252,6 +286,9 @@ export default function AdminPlayerClient(props: {
   const [editSessionThingsToTry, setEditSessionThingsToTry] = useState("");
   const [editSessionNotes, setEditSessionNotes] = useState("");
   const [editSessionAdminNotes, setEditSessionAdminNotes] = useState("");
+  const [editSessionDocumentUrl, setEditSessionDocumentUrl] = useState("");
+  const [editSessionUploadingDocument, setEditSessionUploadingDocument] =
+    useState(false);
   const [editSessionPublished, setEditSessionPublished] = useState(false);
 
   const computed = useMemo(
@@ -260,14 +297,31 @@ export default function AdminPlayerClient(props: {
   );
 
   useEffect(() => {
-    // Always require the code here too.
-    setAuthorized(false);
     setPlayer(null);
     setDraft(null);
     setMsg(null);
     setErrMsg(null);
     props.params.then(({ playerId }) => setPlayerId(playerId));
   }, [props.params]);
+
+  useEffect(() => {
+    if (!playerId) return;
+
+    void (async () => {
+      try {
+        await loadPlayer(securityCode, playerId);
+        await loadTests(securityCode, playerId);
+        await loadProfiles(securityCode, playerId);
+        await loadGoals(securityCode, playerId);
+        await loadSessions(securityCode, playerId);
+        await loadContentSubmissions(securityCode, playerId);
+        await loadFeedback(securityCode, playerId);
+      } catch (e) {
+        setErrMsg(e instanceof Error ? e.message : "Failed to load data.");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerId]);
 
   async function verify(code: string) {
     setAuthError(null);
@@ -385,6 +439,83 @@ export default function AdminPlayerClient(props: {
     setContentSubmissions(data.uploads ?? []);
   }
 
+  async function loadFeedback(code: string, id: string) {
+    const data = await api<{ feedback: PlayerFeedback[] }>(
+      `/api/admin/players/${id}/feedback`,
+      { method: "GET", securityCode: code },
+    );
+    const next = data.feedback ?? [];
+    setFeedbackEntries(next);
+    setSelectedFeedbackId((prev) => {
+      if (prev && next.some((item) => item.id === prev)) return prev;
+      return next[0]?.id ?? null;
+    });
+  }
+
+  async function createFeedback(code: string, id: string) {
+    const rawContent = newFeedbackRawContent.trim();
+    if (!rawContent) {
+      setErrMsg("Raw feedback is required.");
+      return;
+    }
+
+    setCreatingFeedback(true);
+    try {
+      const data = await api<{ feedback: PlayerFeedback }>(
+        `/api/admin/players/${id}/feedback`,
+        {
+          method: "POST",
+          securityCode: code,
+          body: JSON.stringify({
+            raw_content: rawContent,
+            public: true,
+          }),
+        },
+      );
+      setNewFeedbackRawContent("");
+      await loadFeedback(code, id);
+      setSelectedFeedbackId(data.feedback.id);
+      setMsg("Feedback created.");
+    } finally {
+      setCreatingFeedback(false);
+    }
+  }
+
+  async function deleteFeedback(code: string, id: string, feedbackId: string) {
+    setDeletingFeedbackId(feedbackId);
+    try {
+      await api<{ ok: true }>(
+        `/api/admin/players/${id}/feedback/${feedbackId}`,
+        {
+          method: "DELETE",
+          securityCode: code,
+        },
+      );
+      await loadFeedback(code, id);
+      setMsg("Feedback deleted.");
+    } finally {
+      setDeletingFeedbackId(null);
+    }
+  }
+
+  async function recleanFeedback(code: string, id: string, feedbackId: string) {
+    setRecleaningFeedbackId(feedbackId);
+    try {
+      await api<{ feedback: PlayerFeedback }>(
+        `/api/admin/players/${id}/feedback/${feedbackId}`,
+        {
+          method: "PATCH",
+          securityCode: code,
+        },
+      );
+      await loadFeedback(code, id);
+      setSelectedFeedbackId(feedbackId);
+      setMsg("Feedback re-cleaned.");
+    } finally {
+      setRecleaningFeedbackId(null);
+    }
+  }
+
   async function createSession(code: string, id: string) {
     const title = newSessionTitle.trim();
     if (!title) {
@@ -402,6 +533,7 @@ export default function AdminPlayerClient(props: {
       body: JSON.stringify({
         title,
         session_date: date,
+        document_upload_url: newSessionDocumentUrl || null,
         session_plan: newSessionPlan.trim() || null,
         focus_areas: newSessionFocus.trim() || null,
         activities: newSessionActivities.trim() || null,
@@ -418,6 +550,7 @@ export default function AdminPlayerClient(props: {
     setNewSessionThingsToTry("");
     setNewSessionNotes("");
     setNewSessionAdminNotes("");
+    setNewSessionDocumentUrl("");
     await loadSessions(code, id);
   }
 
@@ -434,6 +567,7 @@ export default function AdminPlayerClient(props: {
         body: JSON.stringify({
           title: editSessionTitle,
           session_date: editSessionDate,
+          document_upload_url: editSessionDocumentUrl || null,
           session_plan: editSessionPlan.trim() || null,
           focus_areas: editSessionFocus.trim() || null,
           activities: editSessionActivities.trim() || null,
@@ -482,6 +616,7 @@ export default function AdminPlayerClient(props: {
     setEditSessionThingsToTry(session.things_to_try ?? "");
     setEditSessionNotes(session.notes ?? "");
     setEditSessionAdminNotes(session.admin_notes ?? "");
+    setEditSessionDocumentUrl(session.document_upload_url ?? "");
     setEditSessionPublished(!currentPublished);
 
     await api<{ session: PlayerSession }>(
@@ -492,6 +627,7 @@ export default function AdminPlayerClient(props: {
         body: JSON.stringify({
           title: session.title,
           session_date: session.session_date,
+          document_upload_url: session.document_upload_url,
           session_plan: session.session_plan,
           focus_areas: session.focus_areas,
           activities: session.activities,
@@ -503,6 +639,57 @@ export default function AdminPlayerClient(props: {
       },
     );
     await loadSessions(code, playerId);
+  }
+
+  async function uploadSessionDocument(
+    file: File,
+    mode: "new" | "edit",
+  ): Promise<void> {
+    if (
+      file.type !== "application/pdf" &&
+      !file.name.toLowerCase().endsWith(".pdf")
+    ) {
+      setErrMsg("Please upload a PDF file.");
+      return;
+    }
+
+    setErrMsg(null);
+    if (mode === "new") {
+      setNewSessionUploadingDocument(true);
+    } else {
+      setEditSessionUploadingDocument(true);
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/blob/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to upload PDF.");
+      }
+
+      const data = (await res.json()) as { url: string };
+      if (mode === "new") {
+        setNewSessionDocumentUrl(data.url);
+      } else {
+        setEditSessionDocumentUrl(data.url);
+      }
+      setMsg("PDF uploaded.");
+    } catch (e) {
+      setErrMsg(e instanceof Error ? e.message : "Failed to upload PDF.");
+    } finally {
+      if (mode === "new") {
+        setNewSessionUploadingDocument(false);
+      } else {
+        setEditSessionUploadingDocument(false);
+      }
+    }
   }
 
   const [editingTestId, setEditingTestId] = useState<string | null>(null);
@@ -728,6 +915,15 @@ export default function AdminPlayerClient(props: {
     return JSON.stringify(player) !== JSON.stringify(draft);
   }, [player, draft]);
 
+  const selectedFeedback = useMemo(() => {
+    if (feedbackEntries.length === 0) return null;
+    if (!selectedFeedbackId) return feedbackEntries[0];
+    return (
+      feedbackEntries.find((entry) => entry.id === selectedFeedbackId) ??
+      feedbackEntries[0]
+    );
+  }, [feedbackEntries, selectedFeedbackId]);
+
   return (
     <div className="min-h-screen bg-emerald-50">
       <div className="pointer-events-none absolute inset-0 bg-linear-to-b from-emerald-50 via-white to-white" />
@@ -791,21 +987,6 @@ export default function AdminPlayerClient(props: {
                 </span>
               </Link>
             )}
-            {authorized && (
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthorized(false);
-                  setSecurityCode("");
-                  setPlayer(null);
-                  setDraft(null);
-                  localStorage.removeItem("adminSecurityCode");
-                }}
-                className="rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-gray-800"
-              >
-                Lock
-              </button>
-            )}
           </div>
         </div>
       </header>
@@ -846,6 +1027,7 @@ export default function AdminPlayerClient(props: {
                     await loadGoals(securityCode, playerId);
                     await loadSessions(securityCode, playerId);
                     await loadContentSubmissions(securityCode, playerId);
+                    await loadFeedback(securityCode, playerId);
                   } catch (e) {
                     setAuthError(
                       e instanceof Error ? e.message : "Unauthorized",
@@ -887,6 +1069,7 @@ export default function AdminPlayerClient(props: {
                       await loadGoals(securityCode, playerId);
                       await loadSessions(securityCode, playerId);
                       await loadContentSubmissions(securityCode, playerId);
+                      await loadFeedback(securityCode, playerId);
                       setMsg("Refreshed.");
                     }}
                     disabled={isPending}
@@ -1010,6 +1193,184 @@ export default function AdminPlayerClient(props: {
                     })
                   }
                 />
+              </div>
+
+              <div className="mt-8 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    Player feedback
+                  </div>
+                  <div className="mt-1 text-sm text-gray-600">
+                    Write raw notes, then generate clean markdown with GPT-5.
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 xl:grid-cols-[280px_1fr]">
+                  <div className="space-y-3">
+                    <textarea
+                      value={newFeedbackRawContent}
+                      onChange={(e) => setNewFeedbackRawContent(e.target.value)}
+                      rows={8}
+                      placeholder="Raw feedback notes..."
+                      className="w-full resize-y rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder:text-gray-500 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+                    />
+                    <button
+                      type="button"
+                      disabled={creatingFeedback || !playerId}
+                      onClick={() => {
+                        if (!playerId) return;
+                        setMsg(null);
+                        setErrMsg(null);
+                        void createFeedback(securityCode, playerId).catch((e) => {
+                          setErrMsg(
+                            e instanceof Error
+                              ? e.message
+                              : "Failed to create feedback.",
+                          );
+                        });
+                      }}
+                      className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {creatingFeedback
+                        ? "Creating with GPT-5..."
+                        : "Submit feedback"}
+                    </button>
+
+                    <div className="rounded-2xl border border-emerald-200 bg-white p-2">
+                      <div className="px-2 py-1 text-xs font-semibold text-gray-700">
+                        Saved feedback
+                      </div>
+                      <div className="max-h-80 space-y-1 overflow-y-auto px-1 pb-1">
+                        {feedbackEntries.length === 0 ? (
+                          <div className="rounded-xl px-2 py-3 text-xs text-gray-600">
+                            No feedback yet.
+                          </div>
+                        ) : (
+                          feedbackEntries.map((entry) => {
+                            const active =
+                              selectedFeedback?.id === entry.id;
+                            return (
+                              <button
+                                key={entry.id}
+                                type="button"
+                                onClick={() => setSelectedFeedbackId(entry.id)}
+                                className={`w-full rounded-xl border px-3 py-2 text-left transition ${
+                                  active
+                                    ? "border-emerald-300 bg-emerald-50"
+                                    : "border-transparent bg-white hover:border-emerald-200 hover:bg-emerald-50/40"
+                                }`}
+                              >
+                                <div className="text-xs font-semibold text-gray-900">
+                                  {formatFeedbackTitleForDisplay(entry.title)}
+                                </div>
+                                <div className="mt-1 text-xs text-gray-500">
+                                  {formatDateLabel(entry.created_at)}
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-emerald-200 bg-white p-5">
+                    {!selectedFeedback ? (
+                      <div className="text-sm text-gray-600">
+                        Select a feedback entry from the left.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-base font-semibold text-gray-900">
+                            {formatFeedbackTitleForDisplay(selectedFeedback.title)}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-xs text-gray-500">
+                              {formatDateLabel(selectedFeedback.created_at)}
+                            </div>
+                            <button
+                              type="button"
+                              disabled={
+                                !playerId ||
+                                recleaningFeedbackId === selectedFeedback.id
+                              }
+                              onClick={() => {
+                                if (!playerId) return;
+                                setMsg(null);
+                                setErrMsg(null);
+                                void recleanFeedback(
+                                  securityCode,
+                                  playerId,
+                                  selectedFeedback.id,
+                                ).catch((e) => {
+                                  setErrMsg(
+                                    e instanceof Error
+                                      ? e.message
+                                      : "Failed to re-clean feedback.",
+                                  );
+                                });
+                              }}
+                              className="rounded-lg border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {recleaningFeedbackId === selectedFeedback.id
+                                ? "Re-cleaning..."
+                                : "Re-clean"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={
+                                !playerId ||
+                                deletingFeedbackId === selectedFeedback.id
+                              }
+                              onClick={() => {
+                                if (!playerId) return;
+                                if (
+                                  !window.confirm(
+                                    `Delete "${formatFeedbackTitleForDisplay(selectedFeedback.title)}"?`,
+                                  )
+                                ) {
+                                  return;
+                                }
+                                setMsg(null);
+                                setErrMsg(null);
+                                void deleteFeedback(
+                                  securityCode,
+                                  playerId,
+                                  selectedFeedback.id,
+                                ).catch((e) => {
+                                  setErrMsg(
+                                    e instanceof Error
+                                      ? e.message
+                                      : "Failed to delete feedback.",
+                                  );
+                                });
+                              }}
+                              className="rounded-lg border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 transition hover:border-red-300 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {deletingFeedbackId === selectedFeedback.id
+                                ? "Deleting..."
+                                : "Delete"}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
+                          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                            Cleaned markdown
+                          </div>
+                          <div className="feedback-markdown text-sm leading-relaxed text-gray-800">
+                            <FeedbackMarkdown
+                              content={
+                                selectedFeedback.cleaned_markdown_content?.trim() ||
+                                selectedFeedback.raw_content
+                              }
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="mt-8 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
@@ -1410,6 +1771,52 @@ export default function AdminPlayerClient(props: {
                     onChange={setNewSessionAdminNotes}
                     placeholder="Your private coaching observations (never visible to parents)..."
                   />
+                  <div className="rounded-2xl border border-emerald-200 bg-white p-4">
+                    <div className="text-sm font-semibold text-gray-900">
+                      Session PDF (optional)
+                    </div>
+                    <p className="mt-1 text-xs text-gray-600">
+                      Upload a PDF session plan instead of typing long notes.
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <label className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300">
+                        <input
+                          type="file"
+                          accept="application/pdf,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            void uploadSessionDocument(file, "new");
+                            e.currentTarget.value = "";
+                          }}
+                          disabled={newSessionUploadingDocument}
+                        />
+                        {newSessionUploadingDocument
+                          ? "Uploading PDF..."
+                          : "Upload PDF"}
+                      </label>
+                      {newSessionDocumentUrl && (
+                        <>
+                          <a
+                            href={newSessionDocumentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-semibold text-emerald-700 hover:text-emerald-800"
+                          >
+                            View uploaded PDF
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => setNewSessionDocumentUrl("")}
+                            className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:border-gray-300"
+                          >
+                            Remove
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
 
                   <button
                     type="button"
@@ -1513,6 +1920,54 @@ export default function AdminPlayerClient(props: {
                                     value={editSessionAdminNotes}
                                     onChange={setEditSessionAdminNotes}
                                   />
+                                  <div className="rounded-2xl border border-emerald-200 bg-white p-4">
+                                    <div className="text-sm font-semibold text-gray-900">
+                                      Session PDF (optional)
+                                    </div>
+                                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                                      <label className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300">
+                                        <input
+                                          type="file"
+                                          accept="application/pdf,.pdf"
+                                          className="hidden"
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            void uploadSessionDocument(
+                                              file,
+                                              "edit",
+                                            );
+                                            e.currentTarget.value = "";
+                                          }}
+                                          disabled={editSessionUploadingDocument}
+                                        />
+                                        {editSessionUploadingDocument
+                                          ? "Uploading PDF..."
+                                          : "Upload PDF"}
+                                      </label>
+                                      {editSessionDocumentUrl && (
+                                        <>
+                                          <a
+                                            href={editSessionDocumentUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-xs font-semibold text-emerald-700 hover:text-emerald-800"
+                                          >
+                                            View uploaded PDF
+                                          </a>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setEditSessionDocumentUrl("")
+                                            }
+                                            className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:border-gray-300"
+                                          >
+                                            Remove
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
 
                                   <div className="flex items-center gap-2">
                                     <input
@@ -1665,6 +2120,22 @@ export default function AdminPlayerClient(props: {
                                         </div>
                                       )}
 
+                                      {s.document_upload_url && (
+                                        <div className="mt-2">
+                                          <div className="text-xs font-semibold text-gray-900">
+                                            Session PDF
+                                          </div>
+                                          <a
+                                            href={s.document_upload_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="mt-1 inline-block text-sm font-semibold text-emerald-700 hover:text-emerald-800"
+                                          >
+                                            Open PDF
+                                          </a>
+                                        </div>
+                                      )}
+
                                       {s.admin_notes && (
                                         <div className="mt-2">
                                           <div className="text-xs font-semibold text-gray-900">
@@ -1737,6 +2208,9 @@ export default function AdminPlayerClient(props: {
                                             setEditSessionNotes(s.notes ?? "");
                                             setEditSessionAdminNotes(
                                               s.admin_notes ?? "",
+                                            );
+                                            setEditSessionDocumentUrl(
+                                              s.document_upload_url ?? "",
                                             );
                                             setEditSessionPublished(
                                               s.published,
@@ -1865,7 +2339,6 @@ export default function AdminPlayerClient(props: {
                 <ContentSubmissionsSection
                   playerId={playerId ?? ""}
                   submissions={contentSubmissions}
-                  securityCode={securityCode}
                   onReload={async () => {
                     if (!playerId) return;
                     await loadPlayer(securityCode, playerId);
@@ -1874,6 +2347,7 @@ export default function AdminPlayerClient(props: {
                     await loadGoals(securityCode, playerId);
                     await loadSessions(securityCode, playerId);
                     await loadContentSubmissions(securityCode, playerId);
+                    await loadFeedback(securityCode, playerId);
                   }}
                 />
               </div>

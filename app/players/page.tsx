@@ -34,12 +34,16 @@ export default async function PlayersPage() {
   if (!parentId) redirect("/");
 
   const parentRows = (await sql`
-    SELECT email, phone
+    SELECT email, phone, is_admin
     FROM parents
     WHERE id = ${parentId}
     LIMIT 1
-  `) as unknown as { email: string | null; phone: string | null }[];
-  const parent = parentRows[0] ?? { email: null, phone: null };
+  `) as unknown as {
+    email: string | null;
+    phone: string | null;
+    is_admin: boolean;
+  }[];
+  const parent = parentRows[0] ?? { email: null, phone: null, is_admin: false };
 
   const players = (await sql`
     SELECT
@@ -94,6 +98,14 @@ export default async function PlayersPage() {
               <div className="hidden rounded-full border border-emerald-200/30 bg-white/10 px-4 py-2 text-sm text-emerald-50 sm:block">
                 Parent portal
               </div>
+              {parent.is_admin && (
+                <Link
+                  href="/admin"
+                  className="rounded-xl border border-emerald-200/40 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15"
+                >
+                  View admin
+                </Link>
+              )}
               <ParentAccountSettings
                 initialEmail={parent.email}
                 initialPhone={parent.phone}

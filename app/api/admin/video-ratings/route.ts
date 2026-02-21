@@ -1,27 +1,12 @@
 import { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { sql } from "@/db";
+import { assertAdmin } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
 
-async function assertIsAdmin(req: NextRequest) {
-  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
-  const userId = token?.sub;
-  if (!userId) {
-    return { ok: false as const, res: new Response("Unauthorized", { status: 401 }) };
-  }
-
-  const securityCode = req.headers.get("x-security-code");
-  if (securityCode !== process.env.SECURITY_CODE) {
-    return { ok: false as const, res: new Response("Forbidden", { status: 403 }) };
-  }
-
-  return { ok: true as const, userId };
-}
-
 export async function GET(req: NextRequest) {
-  const auth = await assertIsAdmin(req);
-  if (!auth.ok) return auth.res;
+  const err = await assertAdmin(req);
+  if (err) return err;
 
   try {
     const ratingsRaw = await sql`

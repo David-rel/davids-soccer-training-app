@@ -8,6 +8,7 @@ type PlayerSessionRow = {
   player_id: string;
   session_date: string; // YYYY-MM-DD
   title: string;
+  document_upload_url: string | null;
   session_plan: string | null;
   focus_areas: string | null;
   activities: string | null;
@@ -32,7 +33,7 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ playerId: string; sessionId: string }> }
 ) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { playerId, sessionId } = await ctx.params;
@@ -43,6 +44,7 @@ export async function GET(
       player_id,
       session_date::text AS session_date,
       title,
+      document_upload_url,
       session_plan,
       focus_areas,
       activities,
@@ -68,7 +70,7 @@ export async function PATCH(
   req: NextRequest,
   ctx: { params: Promise<{ playerId: string; sessionId: string }> }
 ) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { playerId, sessionId } = await ctx.params;
@@ -76,6 +78,7 @@ export async function PATCH(
   const body = (await req.json().catch(() => null)) as Partial<{
     session_date: string;
     title: string;
+    document_upload_url: string | null;
     session_plan: string | null;
     focus_areas: string | null;
     activities: string | null;
@@ -87,6 +90,7 @@ export async function PATCH(
 
   const wantsDate = body?.session_date !== undefined;
   const wantsTitle = body?.title !== undefined;
+  const wantsDocumentUploadUrl = body?.document_upload_url !== undefined;
   const wantsPlan = body?.session_plan !== undefined;
   const wantsFocus = body?.focus_areas !== undefined;
   const wantsActivities = body?.activities !== undefined;
@@ -98,6 +102,7 @@ export async function PATCH(
   if (
     !wantsDate &&
     !wantsTitle &&
+    !wantsDocumentUploadUrl &&
     !wantsPlan &&
     !wantsFocus &&
     !wantsActivities &&
@@ -123,6 +128,9 @@ export async function PATCH(
     return new Response(sessionDate.error, { status: 400 });
   }
 
+  const documentUploadUrl = wantsDocumentUploadUrl
+    ? (body?.document_upload_url?.trim() || null)
+    : null;
   const sessionPlan = wantsPlan ? (body?.session_plan?.trim() || null) : null;
   const focusAreas = wantsFocus ? (body?.focus_areas?.trim() || null) : null;
   const activities = wantsActivities
@@ -142,6 +150,7 @@ export async function PATCH(
     SET
       session_date = CASE WHEN ${wantsDate} THEN ${sessionDate}::date ELSE session_date END,
       title = CASE WHEN ${wantsTitle} THEN ${title} ELSE title END,
+      document_upload_url = CASE WHEN ${wantsDocumentUploadUrl} THEN ${documentUploadUrl} ELSE document_upload_url END,
       session_plan = CASE WHEN ${wantsPlan} THEN ${sessionPlan} ELSE session_plan END,
       focus_areas = CASE WHEN ${wantsFocus} THEN ${focusAreas} ELSE focus_areas END,
       activities = CASE WHEN ${wantsActivities} THEN ${activities} ELSE activities END,
@@ -160,6 +169,7 @@ export async function PATCH(
       player_id,
       session_date::text AS session_date,
       title,
+      document_upload_url,
       session_plan,
       focus_areas,
       activities,
@@ -182,7 +192,7 @@ export async function DELETE(
   req: NextRequest,
   ctx: { params: Promise<{ playerId: string; sessionId: string }> }
 ) {
-  const err = assertAdmin(req);
+  const err = await assertAdmin(req);
   if (err) return err;
 
   const { playerId, sessionId } = await ctx.params;
