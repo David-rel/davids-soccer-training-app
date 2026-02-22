@@ -6,6 +6,7 @@ import { sql } from "@/db";
 type PlayerRow = {
   id: string;
   parent_id: string;
+  crm_player_id: number | null;
   name: string;
   age: number | null;
   birthdate: string | null;
@@ -35,6 +36,7 @@ export async function GET(
     SELECT
       id,
       parent_id,
+      crm_player_id,
       name,
       age,
       birthdate::text AS birthdate,
@@ -125,6 +127,7 @@ export async function PATCH(
     RETURNING
       id,
       parent_id,
+      crm_player_id,
       name,
       age,
       birthdate::text AS birthdate,

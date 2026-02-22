@@ -10,6 +10,7 @@ type ParentRow = {
   secondary_parent_name: string | null;
   email: string | null;
   phone: string | null;
+  crm_parent_id: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -24,7 +25,15 @@ export async function GET(
   const { parentId } = await ctx.params;
 
   const rows = (await sql`
-    SELECT id, name, secondary_parent_name, email, phone, created_at, updated_at
+    SELECT
+      id,
+      name,
+      secondary_parent_name,
+      email,
+      phone,
+      crm_parent_id,
+      created_at,
+      updated_at
     FROM parents
     WHERE id = ${parentId}
     LIMIT 1
@@ -56,7 +65,15 @@ export async function PATCH(
   if (!body) return new Response("Invalid JSON body.", { status: 400 });
 
   const rows = (await sql`
-    SELECT id, name, secondary_parent_name, email, phone, created_at, updated_at
+    SELECT
+      id,
+      name,
+      secondary_parent_name,
+      email,
+      phone,
+      crm_parent_id,
+      created_at,
+      updated_at
     FROM parents
     WHERE id = ${parentId}
     LIMIT 1
@@ -123,7 +140,15 @@ export async function PATCH(
       email = ${nextEmail},
       phone = ${nextPhone}
     WHERE id = ${parentId}
-    RETURNING id, name, secondary_parent_name, email, phone, created_at, updated_at
+    RETURNING
+      id,
+      name,
+      secondary_parent_name,
+      email,
+      phone,
+      crm_parent_id,
+      created_at,
+      updated_at
   `) as unknown as ParentRow[];
 
   return Response.json({ parent: updated[0] });

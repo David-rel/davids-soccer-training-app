@@ -6,6 +6,7 @@ import { sql } from "@/db";
 type PlayerRow = {
   id: string;
   parent_id: string;
+  crm_player_id: number | null;
   name: string;
   age: number | null;
   birthdate: string | null;
@@ -22,6 +23,28 @@ type PlayerRow = {
   updated_at: string;
 };
 
+type ParentLinkRow = {
+  id: string;
+  crm_parent_id: number | null;
+};
+
+type CrmPlayerRow = {
+  id: number;
+  parent_id: number;
+  name: string;
+  age: number | null;
+  team: string | null;
+};
+
+function parseOptionalPositiveInt(value: unknown): number | null | "invalid" {
+  if (value === undefined || value === null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) return "invalid";
+  return parsed;
+}
+
 export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ parentId: string }> }
@@ -35,6 +58,7 @@ export async function GET(
     SELECT
       id,
       parent_id,
+      crm_player_id,
       name,
       age,
       birthdate::text AS birthdate,
@@ -77,9 +101,82 @@ export async function POST(
     strengths: string;
     focus_areas: string;
     long_term_development_notes: string;
+    crm_player_id: number | string | null;
   }> | null;
 
-  const name = String(body?.name ?? "").trim();
+  const parentRows = (await sql`
+    SELECT id, crm_parent_id
+    FROM parents
+    WHERE id = ${parentId}
+    LIMIT 1
+  `) as unknown as ParentLinkRow[];
+  const parent = parentRows[0];
+  if (!parent) return new Response("Parent not found.", { status: 404 });
+
+  const crmPlayerId = parseOptionalPositiveInt(body?.crm_player_id);
+  if (crmPlayerId === "invalid") {
+    return new Response("crm_player_id must be a positive integer.", {
+      status: 400,
+    });
+  }
+
+  let crmPlayer: CrmPlayerRow | null = null;
+  if (crmPlayerId !== null) {
+    const existingLink = (await sql`
+      SELECT id
+      FROM players
+      WHERE crm_player_id = ${crmPlayerId}
+      LIMIT 1
+    `) as unknown as Array<{ id: string }>;
+    if (existingLink[0]) {
+      return new Response("That CRM player is already linked in the app.", {
+        status: 409,
+      });
+    }
+
+    const crmRows = (await sql`
+      SELECT id, parent_id, name, age, team
+      FROM crm_players
+      WHERE id = ${crmPlayerId}
+      LIMIT 1
+    `) as unknown as CrmPlayerRow[];
+    crmPlayer = crmRows[0] ?? null;
+    if (!crmPlayer) {
+      return new Response("CRM player not found.", { status: 404 });
+    }
+
+    if (parent.crm_parent_id !== null && parent.crm_parent_id !== crmPlayer.parent_id) {
+      return new Response("CRM player belongs to a different CRM parent.", {
+        status: 409,
+      });
+    }
+
+    if (parent.crm_parent_id === null) {
+      const conflictingParent = (await sql`
+        SELECT id
+        FROM parents
+        WHERE crm_parent_id = ${crmPlayer.parent_id}
+          AND id <> ${parentId}
+        LIMIT 1
+      `) as unknown as Array<{ id: string }>;
+      if (conflictingParent[0]) {
+        return new Response(
+          "CRM parent is already linked to another app parent.",
+          { status: 409 }
+        );
+      }
+
+      await sql`
+        UPDATE parents
+        SET crm_parent_id = ${crmPlayer.parent_id}
+        WHERE id = ${parentId}
+          AND crm_parent_id IS NULL
+      `;
+    }
+  }
+
+  const providedName = String(body?.name ?? "").trim();
+  const name = providedName || String(crmPlayer?.name ?? "").trim();
   if (!name) return new Response("Player name is required.", { status: 400 });
 
   const birthdate = body?.birthdate ? String(body.birthdate).trim() : null;
@@ -87,11 +184,16 @@ export async function POST(
     birthdate && /^\d{4}-\d{2}-\d{2}$/.test(birthdate)
       ? Number(birthdate.slice(0, 4))
       : null;
+  const age = crmPlayer?.age ?? null;
+  const providedTeamLevel = String(body?.team_level ?? "").trim();
+  const teamLevel = providedTeamLevel || crmPlayer?.team || null;
 
   const rows = (await sql`
     INSERT INTO players (
       parent_id,
+      crm_player_id,
       name,
+      age,
       birthdate,
       birth_year,
       team_level,
@@ -105,10 +207,12 @@ export async function POST(
     )
     VALUES (
       ${parentId},
+      ${crmPlayerId},
       ${name},
+      ${age},
       ${birthdate},
       ${birthYear},
-      ${body?.team_level ?? null},
+      ${teamLevel},
       ${body?.primary_position ?? null},
       ${body?.secondary_position ?? null},
       ${body?.dominant_foot ?? null},
@@ -120,6 +224,7 @@ export async function POST(
     RETURNING
       id,
       parent_id,
+      crm_player_id,
       name,
       age,
       birthdate::text AS birthdate,

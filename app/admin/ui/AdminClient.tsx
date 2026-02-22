@@ -9,6 +9,7 @@ type Parent = {
   id: string;
   email: string | null;
   phone: string | null;
+  crm_parent_id: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -16,6 +17,7 @@ type Parent = {
 type Player = {
   id: string;
   parent_id: string;
+  crm_player_id: number | null;
   name: string;
   age: number | null;
   birthdate: string | null;
@@ -97,12 +99,14 @@ export default function AdminClient() {
   // Create parent
   const [newParentEmail, setNewParentEmail] = useState("");
   const [newParentPhone, setNewParentPhone] = useState("");
+  const [newParentCrmId, setNewParentCrmId] = useState("");
   const [newParentPassword, setNewParentPassword] = useState("");
   const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
 
   // Create player
   const [selectedParentId, setSelectedParentId] = useState<string>("");
   const [newPlayer, setNewPlayer] = useState<Partial<Player>>({ name: "" });
+  const [newPlayerCrmId, setNewPlayerCrmId] = useState("");
 
   // Edit player (handled on /admin/player/[id])
 
@@ -310,7 +314,10 @@ export default function AdminClient() {
                     </div>
                     <div className="mt-1 text-xs text-gray-500">
                       {p.email ? `Email: ${p.email}` : "Email: —"} •{" "}
-                      {p.phone ? `Phone: ${p.phone}` : "Phone: —"}
+                      {p.phone ? `Phone: ${p.phone}` : "Phone: —"} •{" "}
+                      {p.crm_parent_id
+                        ? `CRM parent: ${p.crm_parent_id}`
+                        : "CRM parent: —"}
                     </div>
                   </button>
                 ))}
@@ -345,6 +352,12 @@ export default function AdminClient() {
                     value={newParentPhone}
                     onChange={setNewParentPhone}
                     placeholder="+15555555555"
+                  />
+                  <Field
+                    label="CRM Parent ID (optional)"
+                    value={newParentCrmId}
+                    onChange={setNewParentCrmId}
+                    placeholder="e.g. 14"
                   />
                   <Field
                     label="Password"
@@ -392,11 +405,13 @@ export default function AdminClient() {
                           body: JSON.stringify({
                             email: newParentEmail || undefined,
                             phone: newParentPhone || undefined,
+                            crm_parent_id: newParentCrmId || undefined,
                             password: newParentPassword,
                           }),
                         });
                         setNewParentEmail("");
                         setNewParentPhone("");
+                        setNewParentCrmId("");
                         setNewParentPassword("");
                         await refreshAll(securityCode);
                       } catch (e) {
@@ -434,9 +449,20 @@ export default function AdminClient() {
                           selectedParent.phone ??
                           selectedParent.id}
                       </span>
+                      <span className="ml-2">
+                        {selectedParent.crm_parent_id
+                          ? `(CRM parent ${selectedParent.crm_parent_id})`
+                          : "(No CRM parent link)"}
+                      </span>
                     </div>
 
                     <div className="mt-6 grid gap-4">
+                      <Field
+                        label="CRM Player ID (optional)"
+                        value={newPlayerCrmId}
+                        onChange={setNewPlayerCrmId}
+                        placeholder="e.g. 18"
+                      />
                       <Field
                         label="Player name"
                         value={String(newPlayer.name ?? "")}
@@ -570,11 +596,15 @@ export default function AdminClient() {
                                 securityCode,
                                 body: JSON.stringify({
                                   ...newPlayer,
-                                  name: String(newPlayer.name ?? "").trim(),
+                                  crm_player_id: newPlayerCrmId || undefined,
+                                  name:
+                                    String(newPlayer.name ?? "").trim() ||
+                                    undefined,
                                 }),
                               }
                             );
                             setNewPlayer({ name: "" });
+                            setNewPlayerCrmId("");
                             await loadPlayersForParent(
                               securityCode,
                               selectedParent.id
@@ -614,7 +644,10 @@ export default function AdminClient() {
                                 {pl.secondary_position
                                   ? `/ ${pl.secondary_position}`
                                   : ""}{" "}
-                                • {pl.birth_year ?? "—"}
+                                • {pl.birth_year ?? "—"} •{" "}
+                                {pl.crm_player_id
+                                  ? `CRM player ${pl.crm_player_id}`
+                                  : "CRM player —"}
                               </div>
                             </Link>
                           )

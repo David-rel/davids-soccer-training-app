@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Parent = {
   id: string;
@@ -9,6 +9,7 @@ type Parent = {
   secondary_parent_name: string | null;
   email: string | null;
   phone: string | null;
+  crm_parent_id: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -16,6 +17,7 @@ type Parent = {
 type Player = {
   id: string;
   parent_id: string;
+  crm_player_id: number | null;
   name: string;
   birthdate: string | null;
   birth_year: number | null;
@@ -24,6 +26,16 @@ type Player = {
   secondary_position: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type CrmPlayer = {
+  id: number;
+  parent_id: number;
+  name: string;
+  age: number | null;
+  team: string | null;
+  gender: string | null;
+  linked_app_player_id: string | null;
 };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -67,11 +79,43 @@ export default function AdminParentClient(props: {
     text: string;
   } | null>(null);
 
-  const [newPlayerName, setNewPlayerName] = useState("");
+  const [crmPlayers, setCrmPlayers] = useState<CrmPlayer[]>([]);
+  const [selectedCrmPlayerId, setSelectedCrmPlayerId] = useState("");
   const [newPlayerBirthdate, setNewPlayerBirthdate] = useState("");
   const [newPlayerTeamLevel, setNewPlayerTeamLevel] = useState("");
   const [newPlayerPrimaryPosition, setNewPlayerPrimaryPosition] = useState("");
   const [newPlayerSecondaryPosition, setNewPlayerSecondaryPosition] = useState("");
+
+  const availableCrmPlayers = useMemo(
+    () => crmPlayers.filter((p) => !p.linked_app_player_id),
+    [crmPlayers]
+  );
+
+  const selectedCrmPlayer = useMemo(
+    () => crmPlayers.find((p) => String(p.id) === selectedCrmPlayerId) ?? null,
+    [crmPlayers, selectedCrmPlayerId]
+  );
+
+  function applyCrmPlayers(nextPlayers: CrmPlayer[]) {
+    setCrmPlayers(nextPlayers);
+    setSelectedCrmPlayerId((prev) => {
+      if (
+        prev &&
+        nextPlayers.some((p) => String(p.id) === prev && !p.linked_app_player_id)
+      ) {
+        return prev;
+      }
+      const firstOpen = nextPlayers.find((p) => !p.linked_app_player_id);
+      return firstOpen ? String(firstOpen.id) : "";
+    });
+  }
+
+  async function refreshCrmPlayers(crmParentId: number) {
+    const data = await api<{ crmPlayers: CrmPlayer[] }>(
+      `/api/admin/crm/parents/${crmParentId}/players`
+    );
+    applyCrmPlayers(data.crmPlayers ?? []);
+  }
 
   useEffect(() => {
     props.params.then((p) => setParentId(p.parentId));
@@ -107,6 +151,43 @@ export default function AdminParentClient(props: {
     setParentPhone(parent.phone ?? "");
   }, [parent]);
 
+  useEffect(() => {
+    const crmParentId = parent?.crm_parent_id;
+    if (!crmParentId) {
+      setCrmPlayers([]);
+      setSelectedCrmPlayerId("");
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await api<{ crmPlayers: CrmPlayer[] }>(
+          `/api/admin/crm/parents/${crmParentId}/players`
+        );
+        if (cancelled) return;
+        applyCrmPlayers(data.crmPlayers ?? []);
+      } catch (e) {
+        if (cancelled) return;
+        setError(
+          e instanceof Error ? e.message : "Failed to load CRM players."
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [parent?.crm_parent_id]);
+
+  useEffect(() => {
+    if (!selectedCrmPlayer) {
+      setNewPlayerTeamLevel("");
+      return;
+    }
+    setNewPlayerTeamLevel(selectedCrmPlayer.team ?? "");
+  }, [selectedCrmPlayer]);
+
   async function saveParentInfo() {
     if (!parentId) return;
 
@@ -136,8 +217,16 @@ export default function AdminParentClient(props: {
   }
 
   async function createPlayer() {
-    if (!parentId || !newPlayerName.trim()) {
-      setError("Player name is required.");
+    if (!parentId) {
+      setError("Parent is missing.");
+      return;
+    }
+    if (!parent?.crm_parent_id) {
+      setError("This parent is not linked to CRM.");
+      return;
+    }
+    if (!selectedCrmPlayerId) {
+      setError("Select a CRM player first.");
       return;
     }
 
@@ -146,7 +235,7 @@ export default function AdminParentClient(props: {
       await api<{ player: Player }>(`/api/admin/parents/${parentId}/players`, {
         method: "POST",
         body: JSON.stringify({
-          name: newPlayerName.trim(),
+          crm_player_id: selectedCrmPlayerId,
           birthdate: newPlayerBirthdate || undefined,
           team_level: newPlayerTeamLevel || undefined,
           primary_position: newPlayerPrimaryPosition || undefined,
@@ -154,12 +243,13 @@ export default function AdminParentClient(props: {
         }),
       });
 
-      setNewPlayerName("");
+      setSelectedCrmPlayerId("");
       setNewPlayerBirthdate("");
       setNewPlayerTeamLevel("");
       setNewPlayerPrimaryPosition("");
       setNewPlayerSecondaryPosition("");
       await loadAll(parentId);
+      await refreshCrmPlayers(parent.crm_parent_id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add player.");
     }
@@ -177,6 +267,11 @@ export default function AdminParentClient(props: {
                 Secondary parent: {parent.secondary_parent_name}
               </p>
             )}
+            <p className="mt-1 text-xs text-gray-600">
+              {parent?.crm_parent_id
+                ? `CRM parent: ${parent.crm_parent_id}`
+                : "CRM parent: —"}
+            </p>
           </div>
           <div className="flex gap-2">
             <Link
@@ -262,12 +357,40 @@ export default function AdminParentClient(props: {
           <section className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-gray-900">Add New Kid</h2>
             <div className="mt-4 grid gap-3">
-              <input
-                value={newPlayerName}
-                onChange={(e) => setNewPlayerName(e.target.value)}
-                placeholder="Player name"
-                className="w-full rounded-xl border border-emerald-200 px-3 py-2 text-sm"
-              />
+              {!parent?.crm_parent_id ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Link this parent to CRM first, then pick a kid from CRM.
+                </div>
+              ) : (
+                <>
+                  <select
+                    value={selectedCrmPlayerId}
+                    onChange={(e) => setSelectedCrmPlayerId(e.target.value)}
+                    className="w-full rounded-xl border border-emerald-200 px-3 py-2 text-sm"
+                  >
+                    <option value="">Select CRM player</option>
+                    {availableCrmPlayers.map((player) => (
+                      <option key={player.id} value={String(player.id)}>
+                        {player.team
+                          ? `${player.name} • ${player.team}`
+                          : player.name}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedCrmPlayer && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-gray-700">
+                      <div>Name: {selectedCrmPlayer.name}</div>
+                      <div>Team: {selectedCrmPlayer.team ?? "—"}</div>
+                      <div>Age: {selectedCrmPlayer.age ?? "—"}</div>
+                    </div>
+                  )}
+                  {availableCrmPlayers.length === 0 && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-gray-700">
+                      No unlinked CRM kids for this parent.
+                    </div>
+                  )}
+                </>
+              )}
               <input
                 type="date"
                 value={newPlayerBirthdate}
@@ -298,6 +421,7 @@ export default function AdminParentClient(props: {
               <button
                 type="button"
                 onClick={() => void createPlayer()}
+                disabled={!parent?.crm_parent_id || !selectedCrmPlayerId}
                 className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
               >
                 Add kid
@@ -326,6 +450,11 @@ export default function AdminParentClient(props: {
                       {player.team_level ?? "No team level"}
                       {player.primary_position ? ` | ${player.primary_position}` : ""}
                       {player.secondary_position ? ` / ${player.secondary_position}` : ""}
+                    </div>
+                    <div className="mt-1 text-xs text-gray-600">
+                      {player.crm_player_id
+                        ? `CRM player: ${player.crm_player_id}`
+                        : "CRM player: —"}
                     </div>
                   </Link>
                 ))}
