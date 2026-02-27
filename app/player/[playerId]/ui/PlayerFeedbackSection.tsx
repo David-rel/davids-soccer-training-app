@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { FeedbackMarkdown } from "@/app/ui/FeedbackMarkdown";
 import { formatFeedbackTitleForDisplay } from "@/lib/feedbackTitle";
+import {
+  parsePlayerHash,
+  scrollToPlayerSection,
+  updatePlayerHash,
+} from "./playerHashNavigation";
 
 type PlayerFeedback = {
   id: string;
@@ -27,6 +32,7 @@ export function PlayerFeedbackSection({
 }) {
   const [feedback, setFeedback] = useState<PlayerFeedback[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [targetFeedbackId, setTargetFeedbackId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +64,12 @@ export function PlayerFeedbackSection({
 
       setFeedback(visible);
       setSelectedId((prev) => {
+        if (
+          targetFeedbackId &&
+          visible.some((entry) => entry.id === targetFeedbackId)
+        ) {
+          return targetFeedbackId;
+        }
         if (prev && visible.some((entry) => entry.id === prev)) return prev;
         return visible[0]?.id ?? null;
       });
@@ -73,6 +85,36 @@ export function PlayerFeedbackSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerId, isAdminMode]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const applyHash = () => {
+      const hashState = parsePlayerHash(window.location.hash);
+      setTargetFeedbackId(hashState.feedbackId);
+      if (hashState.section === "feedback" || hashState.feedbackId) {
+        scrollToPlayerSection("player-feedback-section");
+      }
+    };
+
+    applyHash();
+    window.addEventListener("hashchange", applyHash);
+    return () => {
+      window.removeEventListener("hashchange", applyHash);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!targetFeedbackId || feedback.length === 0) return;
+    const match = feedback.find((entry) => entry.id === targetFeedbackId);
+    if (!match) return;
+    setSelectedId(match.id);
+    window.requestAnimationFrame(() => {
+      const element = document.getElementById(`player-feedback-${match.id}`);
+      if (!element) return;
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [feedback, targetFeedbackId]);
+
   const selected = useMemo(() => {
     if (feedback.length === 0) return null;
     if (!selectedId) return feedback[0];
@@ -80,7 +122,10 @@ export function PlayerFeedbackSection({
   }, [feedback, selectedId]);
 
   return (
-    <section className="rounded-3xl border border-emerald-200 bg-white p-8 shadow-sm">
+    <section
+      id="player-feedback-section"
+      className="rounded-3xl border border-emerald-200 bg-white p-8 shadow-sm"
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Coach Feedback</h2>
@@ -119,7 +164,14 @@ export function PlayerFeedbackSection({
                   <button
                     key={entry.id}
                     type="button"
-                    onClick={() => setSelectedId(entry.id)}
+                    onClick={() => {
+                      setSelectedId(entry.id);
+                      updatePlayerHash({
+                        section: "feedback",
+                        feedbackId: entry.id,
+                      });
+                    }}
+                    id={`player-feedback-${entry.id}`}
                     className={`w-full rounded-xl border px-3 py-2 text-left transition ${
                       active
                         ? "border-emerald-300 bg-emerald-50"

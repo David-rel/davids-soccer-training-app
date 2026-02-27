@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { updatePlayerHash } from "./playerHashNavigation";
 
 type PlayerSession = {
   id: string;
@@ -33,15 +34,18 @@ function isPdfUrl(url: string) {
 
 export function PlayerSessions({ 
   playerId, 
-  isAdminMode
+  isAdminMode,
+  targetSessionId,
 }: { 
   playerId: string;
   isAdminMode?: boolean;
+  targetSessionId?: string | null;
 }) {
   const [sessions, setSessions] = useState<PlayerSession[]>([]);
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastAppliedTargetRef = useRef<string | null>(null);
 
   async function load() {
     try {
@@ -84,6 +88,31 @@ export function PlayerSessions({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerId, isAdminMode]);
+
+  useEffect(() => {
+    if (!targetSessionId) {
+      lastAppliedTargetRef.current = null;
+      return;
+    }
+    if (lastAppliedTargetRef.current === targetSessionId) return;
+
+    const exists = sessions.some((session) => session.id === targetSessionId);
+    if (!exists) return;
+
+    setExpandedSessionIds((prev) => {
+      const next = new Set(prev);
+      next.add(targetSessionId);
+      return next;
+    });
+
+    window.requestAnimationFrame(() => {
+      const element = document.getElementById(`player-session-${targetSessionId}`);
+      if (!element) return;
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    lastAppliedTargetRef.current = targetSessionId;
+  }, [sessions, targetSessionId]);
 
   return (
     <div className="space-y-4">
@@ -142,11 +171,17 @@ export function PlayerSessions({
                 }
                 return next;
               });
+              updatePlayerHash({
+                section: "tests",
+                tab: "sessions",
+                sessionId: s.id,
+              });
             };
 
             return (
               <div
                 key={s.id}
+                id={`player-session-${s.id}`}
                 className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"
               >
                 <div 
@@ -246,7 +281,7 @@ export function PlayerSessions({
                             <iframe
                               title={`Session PDF preview for ${s.title}`}
                               src={`${sessionPdfUrl}#view=FitH`}
-                              className="h-56 w-full bg-white"
+                              className="h-[55vh] min-h-[420px] w-full bg-white lg:h-[70vh]"
                             />
                           </div>
                         )}

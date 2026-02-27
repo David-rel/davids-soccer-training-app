@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { VideoCard } from "@/app/ui/VideoCard";
+import type { PlayerVideoMode } from "./playerHashNavigation";
 
 type Video = {
   id: string;
@@ -43,14 +44,48 @@ type ContinueWatchingVideo = Video & {
   rating_stars: number | null;
 };
 
+type PinnedVideo = {
+  id: string;
+  priority: number | null;
+  note: string | null;
+  coach_notes?: string | null;
+  created_at: string;
+  video_id: string;
+  video: Video;
+};
+
 type ViewMode = "recommendations" | "browse" | "continue" | "pinned";
 
-export function PlayerVideos({ playerId }: { playerId: string }) {
+function getVideoIdForItem(item: unknown, viewMode: ViewMode): string | null {
+  if (viewMode === "recommendations") {
+    const recommendation = item as ScoredVideo;
+    return recommendation.video?.id ?? null;
+  }
+  if (viewMode === "pinned") {
+    const pinnedItem = item as {
+      video?: { id?: string | null } | null;
+      video_id?: string | null;
+    };
+    return pinnedItem.video?.id ?? pinnedItem.video_id ?? null;
+  }
+  const video = item as Video;
+  return video.id ?? null;
+}
+
+export function PlayerVideos({
+  playerId,
+  targetVideoId,
+  targetVideoMode,
+}: {
+  playerId: string;
+  targetVideoId?: string | null;
+  targetVideoMode?: PlayerVideoMode | null;
+}) {
   const [viewMode, setViewMode] = useState<ViewMode>("pinned");
   const [videos, setVideos] = useState<Video[]>([]);
   const [recommendations, setRecommendations] = useState<ScoredVideo[]>([]);
   const [continueWatching, setContinueWatching] = useState<ContinueWatchingVideo[]>([]);
-  const [pinnedVideos, setPinnedVideos] = useState<any[]>([]);
+  const [pinnedVideos, setPinnedVideos] = useState<PinnedVideo[]>([]);
   const [recommendationMetadata, setRecommendationMetadata] = useState<RecommendationResponse["metadata"] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +96,7 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(0);
+  const lastAppliedTargetRef = useRef<string | null>(null);
 
   const VIDEOS_PER_PAGE = 5;
 
@@ -139,7 +175,8 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
       }
       const data = await res.json();
       // Handle both array response and object with pins property
-      setPinnedVideos(Array.isArray(data) ? data : (data.pins ?? []));
+      const pins = Array.isArray(data) ? data : (data.pins ?? []);
+      setPinnedVideos(pins as PinnedVideo[]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load pinned videos");
       console.error("Error loading pinned videos:", e);
@@ -201,6 +238,49 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
     : viewMode === "pinned"
     ? pinnedVideos.slice(startIndex, endIndex)
     : videos.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    if (!targetVideoId) {
+      lastAppliedTargetRef.current = null;
+      return;
+    }
+
+    if (targetVideoMode && viewMode !== targetVideoMode) {
+      setViewMode(targetVideoMode);
+      return;
+    }
+
+    if (loading) return;
+
+    const targetIndex = displayItems.findIndex(
+      (item) => getVideoIdForItem(item, viewMode) === targetVideoId,
+    );
+    if (targetIndex < 0) return;
+
+    const nextPage = Math.floor(targetIndex / VIDEOS_PER_PAGE);
+    if (nextPage !== currentPage) {
+      setCurrentPage(nextPage);
+      return;
+    }
+
+    const appliedKey = `${viewMode}:${targetVideoId}:${currentPage}`;
+    if (lastAppliedTargetRef.current === appliedKey) return;
+
+    window.requestAnimationFrame(() => {
+      const element = document.getElementById(`player-video-${targetVideoId}`);
+      if (!element) return;
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    lastAppliedTargetRef.current = appliedKey;
+  }, [
+    currentPage,
+    displayItems,
+    loading,
+    targetVideoId,
+    targetVideoMode,
+    viewMode,
+    VIDEOS_PER_PAGE,
+  ]);
 
   const handleNextPage = () => {
     if (currentPage < totalPages - 1) {
@@ -292,7 +372,7 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
               : "border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
           }`}
         >
-          Coach's Picks
+          Coach&apos;s Picks
         </button>
         <button
           type="button"
@@ -370,7 +450,7 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
             Suggest a Video
           </div>
           <p className="mt-1 text-xs text-gray-600">
-            If you have a video that you'd like to share with others, submit the
+            If you have a video that you would like to share with others, submit the
             URL and title below. Your suggestion will be reviewed by Coach David
             before being added to the library.
           </p>
@@ -444,7 +524,7 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
           {viewMode === "recommendations"
             ? "No recommendations available. Complete some tests to get personalized videos!"
             : viewMode === "pinned"
-            ? "No pinned videos yet. Your coach hasn't pinned any videos for you."
+            ? "No pinned videos yet. Your coach has not pinned any videos for you."
             : "No videos available yet. Check back soon!"}
         </div>
       ) : (
@@ -454,7 +534,11 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
               ? currentVideos.map((item) => {
                   const scoredVideo = item as ScoredVideo;
                   return (
-                    <div key={scoredVideo.video.id} className="space-y-2">
+                    <div
+                      key={scoredVideo.video.id}
+                      id={`player-video-${scoredVideo.video.id}`}
+                      className="space-y-2"
+                    >
                       {/* Recommendation Info */}
                       <div className="flex items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2">
                         <div className="flex items-center gap-2">
@@ -493,32 +577,37 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
                     : 0;
 
                   return (
-                    <VideoCard
-                      key={cwVideo.id}
-                      video={cwVideo}
-                      playerId={playerId}
-                      currentRating={cwVideo.rating_stars}
-                      showProgress={true}
-                      progressPercent={progressPercent}
-                      lastPosition={cwVideo.last_position_seconds}
-                      onWatch={() => handleVideoEngagement(cwVideo.id, "watch")}
-                      onComplete={() => handleVideoEngagement(cwVideo.id, "complete")}
-                    />
+                    <div key={cwVideo.id} id={`player-video-${cwVideo.id}`}>
+                      <VideoCard
+                        video={cwVideo}
+                        playerId={playerId}
+                        currentRating={cwVideo.rating_stars}
+                        showProgress={true}
+                        progressPercent={progressPercent}
+                        lastPosition={cwVideo.last_position_seconds}
+                        onWatch={() => handleVideoEngagement(cwVideo.id, "watch")}
+                        onComplete={() => handleVideoEngagement(cwVideo.id, "complete")}
+                      />
+                    </div>
                   );
                 })
               : viewMode === "pinned"
-              ? currentVideos.map((item: any, idx: number) => {
+              ? (currentVideos as PinnedVideo[]).map((item, idx: number) => {
                   const pinnedItem = item;
                   return (
-                    <div key={pinnedItem.video_id} className="space-y-2">
+                    <div
+                      key={pinnedItem.video_id}
+                      id={`player-video-${pinnedItem.video?.id ?? pinnedItem.video_id}`}
+                      className="space-y-2"
+                    >
                       {/* Priority badge and coach notes */}
                       <div className="flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2">
                         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">
                           {startIndex + idx + 1}
                         </div>
-                        {pinnedItem.coach_notes && (
+                        {(pinnedItem.coach_notes ?? pinnedItem.note) && (
                           <p className="text-xs italic text-emerald-800">
-                            {pinnedItem.coach_notes}
+                            {pinnedItem.coach_notes ?? pinnedItem.note}
                           </p>
                         )}
                       </div>
@@ -536,13 +625,14 @@ export function PlayerVideos({ playerId }: { playerId: string }) {
               : currentVideos.map((item) => {
                   const video = item as Video;
                   return (
-                    <VideoCard
-                      key={video.id}
-                      video={video}
-                      playerId={playerId}
-                      onWatch={() => handleVideoEngagement(video.id, "watch")}
-                      onComplete={() => handleVideoEngagement(video.id, "complete")}
-                    />
+                    <div key={video.id} id={`player-video-${video.id}`}>
+                      <VideoCard
+                        video={video}
+                        playerId={playerId}
+                        onWatch={() => handleVideoEngagement(video.id, "watch")}
+                        onComplete={() => handleVideoEngagement(video.id, "complete")}
+                      />
+                    </div>
                   );
                 })}
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { updatePlayerHash } from "./playerHashNavigation";
 
 type PlayerGoal = {
   id: string;
@@ -32,10 +33,12 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function PlayerGoals({ 
   playerId,
-  isAdminMode
+  isAdminMode,
+  targetGoalId,
 }: { 
   playerId: string;
   isAdminMode?: boolean;
+  targetGoalId?: string | null;
 }) {
   const [goals, setGoals] = useState<PlayerGoal[]>([]);
   const [goalDrafts, setGoalDrafts] = useState<
@@ -46,6 +49,7 @@ export function PlayerGoals({
   const [msg, setMsg] = useState<string | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const lastAppliedTargetRef = useRef<string | null>(null);
 
   async function load() {
     const endpoint = isAdminMode 
@@ -85,6 +89,23 @@ export function PlayerGoals({
     const d = goals.filter((g) => g.completed);
     return { todo: t, done: d };
   }, [goals]);
+
+  useEffect(() => {
+    if (!targetGoalId) {
+      lastAppliedTargetRef.current = null;
+      return;
+    }
+    if (lastAppliedTargetRef.current === targetGoalId) return;
+    const exists = goals.some((goal) => goal.id === targetGoalId);
+    if (!exists) return;
+
+    window.requestAnimationFrame(() => {
+      const element = document.getElementById(`player-goal-${targetGoalId}`);
+      if (!element) return;
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    lastAppliedTargetRef.current = targetGoalId;
+  }, [goals, targetGoalId]);
 
   return (
     <div className="space-y-4">
@@ -203,6 +224,14 @@ export function PlayerGoals({
                 return (
                   <div
                     key={g.id}
+                    id={`player-goal-${g.id}`}
+                    onClick={() =>
+                      updatePlayerHash({
+                        section: "tests",
+                        tab: "goals",
+                        goalId: g.id,
+                      })
+                    }
                     className="rounded-2xl border border-emerald-200 bg-white p-4"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -362,6 +391,14 @@ export function PlayerGoals({
               done.map((g) => (
                 <div
                   key={g.id}
+                  id={`player-goal-${g.id}`}
+                  onClick={() =>
+                    updatePlayerHash({
+                      section: "tests",
+                      tab: "goals",
+                      goalId: g.id,
+                    })
+                  }
                   className="rounded-2xl border border-emerald-200 bg-white px-4 py-3"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">

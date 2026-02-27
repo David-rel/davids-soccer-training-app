@@ -1,7 +1,7 @@
 "use client";
 
 import { TEST_DEFINITIONS } from "@/lib/testDefinitions";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Profile = {
   id: string;
@@ -150,6 +150,11 @@ function nonZeroDelta(
   const v = Number(n);
   if (!Number.isFinite(v)) return null;
   return Math.abs(v) < epsilon ? null : v;
+}
+
+function normalizeTestLookup(value: string | null | undefined) {
+  if (!value) return "";
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
 }
 
 type DerivedMetric = {
@@ -984,14 +989,17 @@ function MetricCard({
 
 export function PlayerInsights({ 
   playerId,
-  isAdminMode
+  isAdminMode,
+  targetTestId,
 }: { 
   playerId: string;
   isAdminMode?: boolean;
+  targetTestId?: string | null;
 }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [tests, setTests] = useState<PlayerTest[]>([]);
   const [loading, setLoading] = useState(true);
+  const lastAppliedTargetRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1062,6 +1070,37 @@ export function PlayerInsights({
     return map;
   }, [rawTests, tests]);
 
+  useEffect(() => {
+    if (!targetTestId) {
+      lastAppliedTargetRef.current = null;
+      return;
+    }
+    if (lastAppliedTargetRef.current === targetTestId) return;
+
+    const normalizedTarget = normalizeTestLookup(targetTestId);
+    if (!normalizedTarget) return;
+
+    const matchingDefinition = TEST_DEFINITIONS.find((definition) => {
+      return (
+        normalizeTestLookup(definition.id) === normalizedTarget ||
+        normalizeTestLookup(definition.name) === normalizedTarget
+      );
+    });
+
+    if (!matchingDefinition) return;
+    if (!latestByTestName.has(matchingDefinition.name)) return;
+
+    window.requestAnimationFrame(() => {
+      const element = document.getElementById(
+        `player-test-${matchingDefinition.id}`,
+      );
+      if (!element) return;
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    lastAppliedTargetRef.current = targetTestId;
+  }, [latestByTestName, targetTestId]);
+
   if (loading) {
     return (
       <div className="text-sm text-gray-600">
@@ -1127,6 +1166,7 @@ export function PlayerInsights({
               return (
                 <div
                   key={def.id}
+                  id={`player-test-${def.id}`}
                   className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-3">

@@ -28,7 +28,13 @@ type ListResponse = {
   limit: LimitInfo;
 };
 
-export function PlayerUploads({ playerId }: { playerId: string }) {
+export function PlayerUploads({
+  playerId,
+  targetUploadId,
+}: {
+  playerId: string;
+  targetUploadId?: string | null;
+}) {
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [limit, setLimit] = useState<LimitInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,6 +49,7 @@ export function PlayerUploads({ playerId }: { playerId: string }) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastAppliedTargetRef = useRef<string | null>(null);
 
   async function loadUploads() {
     try {
@@ -73,6 +80,23 @@ export function PlayerUploads({ playerId }: { playerId: string }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerId]);
+
+  useEffect(() => {
+    if (!targetUploadId) {
+      lastAppliedTargetRef.current = null;
+      return;
+    }
+    if (lastAppliedTargetRef.current === targetUploadId) return;
+    const exists = uploads.some((upload) => upload.id === targetUploadId);
+    if (!exists) return;
+
+    window.requestAnimationFrame(() => {
+      const element = document.getElementById(`player-upload-${targetUploadId}`);
+      if (!element) return;
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    lastAppliedTargetRef.current = targetUploadId;
+  }, [targetUploadId, uploads]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -392,6 +416,7 @@ export function PlayerUploads({ playerId }: { playerId: string }) {
             {uploads.map((upload) => (
               <div
                 key={upload.id}
+                id={`player-upload-${upload.id}`}
                 className="rounded-2xl border border-gray-200 bg-white p-4"
               >
                 {/* Submission Info */}
