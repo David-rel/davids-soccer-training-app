@@ -121,6 +121,7 @@ function buildGroupSessionUrl(
     const { firstName, lastName } = splitPlayerName(player.name);
     setParamIfPresent(params, "kidFirstName", firstName);
     setParamIfPresent(params, "kidLastName", lastName);
+    setParamIfPresent(params, "birthday", player.birthdate);
     setParamIfPresent(params, "preferredFoot", player.dominant_foot);
     setParamIfPresent(params, "team", player.team_level);
     setParamIfPresent(
