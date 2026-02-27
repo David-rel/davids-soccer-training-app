@@ -23,6 +23,18 @@ type Player = {
   strengths: string | null;
   focus_areas: string | null;
   long_term_development_notes: string | null;
+  first_touch_rating: number | null;
+  first_touch_notes: string | null;
+  one_v_one_ability_rating: number | null;
+  one_v_one_ability_notes: string | null;
+  passing_technique_rating: number | null;
+  passing_technique_notes: string | null;
+  shot_technique_rating: number | null;
+  shot_technique_notes: string | null;
+  vision_recognition_rating: number | null;
+  vision_recognition_notes: string | null;
+  great_soccer_habits_rating: number | null;
+  great_soccer_habits_notes: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -174,6 +186,60 @@ function TextArea({
         rows={4}
         className="w-full resize-y rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 placeholder:text-gray-500 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
       />
+    </div>
+  );
+}
+
+function SkillRatingRow({
+  label,
+  rating,
+  notes,
+  onRatingChange,
+  onNotesChange,
+}: {
+  label: string;
+  rating: number | null;
+  notes: string | null;
+  onRatingChange: (value: number | null) => void;
+  onNotesChange: (value: string | null) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4">
+      <div className="text-sm font-semibold text-gray-900">{label}</div>
+      <div className="mt-3 grid gap-3 md:grid-cols-[160px_1fr]">
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+            Rating (1-5)
+          </label>
+          <select
+            value={rating === null ? "" : String(rating)}
+            onChange={(e) => {
+              const value = e.target.value;
+              onRatingChange(value ? Number(value) : null);
+            }}
+            className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+          >
+            <option value="">No rating</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+            Notes
+          </label>
+          <textarea
+            value={notes ?? ""}
+            onChange={(e) => onNotesChange(e.target.value || null)}
+            rows={3}
+            placeholder="Coach notes..."
+            className="w-full resize-y rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder:text-gray-500 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -1191,6 +1257,89 @@ export default function AdminPlayerClient(props: {
                       ...draft,
                       long_term_development_notes: v || null,
                     })
+                  }
+                />
+              </div>
+
+              <div className="mt-6 space-y-3">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    General soccer skills
+                  </div>
+                  <div className="mt-1 text-sm text-gray-600">
+                    Add a rating from 1 to 5 and notes for each skill area.
+                  </div>
+                </div>
+
+                <SkillRatingRow
+                  label="First Touch"
+                  rating={draft.first_touch_rating}
+                  notes={draft.first_touch_notes}
+                  onRatingChange={(value) =>
+                    setDraft({ ...draft, first_touch_rating: value })
+                  }
+                  onNotesChange={(value) =>
+                    setDraft({ ...draft, first_touch_notes: value })
+                  }
+                />
+
+                <SkillRatingRow
+                  label="1v1 Ability"
+                  rating={draft.one_v_one_ability_rating}
+                  notes={draft.one_v_one_ability_notes}
+                  onRatingChange={(value) =>
+                    setDraft({ ...draft, one_v_one_ability_rating: value })
+                  }
+                  onNotesChange={(value) =>
+                    setDraft({ ...draft, one_v_one_ability_notes: value })
+                  }
+                />
+
+                <SkillRatingRow
+                  label="Passing Technique"
+                  rating={draft.passing_technique_rating}
+                  notes={draft.passing_technique_notes}
+                  onRatingChange={(value) =>
+                    setDraft({ ...draft, passing_technique_rating: value })
+                  }
+                  onNotesChange={(value) =>
+                    setDraft({ ...draft, passing_technique_notes: value })
+                  }
+                />
+
+                <SkillRatingRow
+                  label="Shot Technique"
+                  rating={draft.shot_technique_rating}
+                  notes={draft.shot_technique_notes}
+                  onRatingChange={(value) =>
+                    setDraft({ ...draft, shot_technique_rating: value })
+                  }
+                  onNotesChange={(value) =>
+                    setDraft({ ...draft, shot_technique_notes: value })
+                  }
+                />
+
+                <SkillRatingRow
+                  label="Vision / Recognition"
+                  rating={draft.vision_recognition_rating}
+                  notes={draft.vision_recognition_notes}
+                  onRatingChange={(value) =>
+                    setDraft({ ...draft, vision_recognition_rating: value })
+                  }
+                  onNotesChange={(value) =>
+                    setDraft({ ...draft, vision_recognition_notes: value })
+                  }
+                />
+
+                <SkillRatingRow
+                  label="Great Soccer Habits"
+                  rating={draft.great_soccer_habits_rating}
+                  notes={draft.great_soccer_habits_notes}
+                  onRatingChange={(value) =>
+                    setDraft({ ...draft, great_soccer_habits_rating: value })
+                  }
+                  onNotesChange={(value) =>
+                    setDraft({ ...draft, great_soccer_habits_notes: value })
                   }
                 />
               </div>
@@ -2312,6 +2461,26 @@ export default function AdminPlayerClient(props: {
                               focus_areas: draft.focus_areas,
                               long_term_development_notes:
                                 draft.long_term_development_notes,
+                              first_touch_rating: draft.first_touch_rating,
+                              first_touch_notes: draft.first_touch_notes,
+                              one_v_one_ability_rating:
+                                draft.one_v_one_ability_rating,
+                              one_v_one_ability_notes:
+                                draft.one_v_one_ability_notes,
+                              passing_technique_rating:
+                                draft.passing_technique_rating,
+                              passing_technique_notes:
+                                draft.passing_technique_notes,
+                              shot_technique_rating: draft.shot_technique_rating,
+                              shot_technique_notes: draft.shot_technique_notes,
+                              vision_recognition_rating:
+                                draft.vision_recognition_rating,
+                              vision_recognition_notes:
+                                draft.vision_recognition_notes,
+                              great_soccer_habits_rating:
+                                draft.great_soccer_habits_rating,
+                              great_soccer_habits_notes:
+                                draft.great_soccer_habits_notes,
                             }),
                           },
                         );

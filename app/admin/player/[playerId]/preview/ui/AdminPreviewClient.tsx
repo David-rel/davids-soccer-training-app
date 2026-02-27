@@ -19,6 +19,18 @@ type Player = {
   strengths: string | null;
   focus_areas: string | null;
   long_term_development_notes: string | null;
+  first_touch_rating: number | null;
+  first_touch_notes: string | null;
+  one_v_one_ability_rating: number | null;
+  one_v_one_ability_notes: string | null;
+  passing_technique_rating: number | null;
+  passing_technique_notes: string | null;
+  shot_technique_rating: number | null;
+  shot_technique_notes: string | null;
+  vision_recognition_rating: number | null;
+  vision_recognition_notes: string | null;
+  great_soccer_habits_rating: number | null;
+  great_soccer_habits_notes: string | null;
 };
 
 export default function AdminPreviewClient(props: {
@@ -80,6 +92,39 @@ export default function AdminPreviewClient(props: {
       </div>
     );
   }
+
+  const skillRatings = [
+    {
+      label: "First Touch",
+      rating: player.first_touch_rating,
+      notes: player.first_touch_notes,
+    },
+    {
+      label: "1v1 Ability",
+      rating: player.one_v_one_ability_rating,
+      notes: player.one_v_one_ability_notes,
+    },
+    {
+      label: "Passing Technique",
+      rating: player.passing_technique_rating,
+      notes: player.passing_technique_notes,
+    },
+    {
+      label: "Shot Technique",
+      rating: player.shot_technique_rating,
+      notes: player.shot_technique_notes,
+    },
+    {
+      label: "Vision / Recognition",
+      rating: player.vision_recognition_rating,
+      notes: player.vision_recognition_notes,
+    },
+    {
+      label: "Great Soccer Habits",
+      rating: player.great_soccer_habits_rating,
+      notes: player.great_soccer_habits_notes,
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-emerald-50">
@@ -249,16 +294,68 @@ export default function AdminPreviewClient(props: {
                     </div>
                   )}
 
-                  {/* Empty state */}
-                  {!player.strengths &&
-                    !player.focus_areas &&
-                    !player.long_term_development_notes && (
-                      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 text-center">
-                        <p className="text-sm text-gray-500">
-                          No coach notes yet. Check back after your next session!
-                        </p>
+                  {/* General soccer skills (1-5 + notes) */}
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4">
+                    <div className="text-sm font-semibold text-gray-900">
+                      General Soccer Skills
+                    </div>
+                    <p className="mt-1 text-xs text-gray-600">
+                      Skill score (1-5) and coach notes.
+                    </p>
+                    <p className="mt-2 text-xs text-gray-600">
+                      Ratings show current stage and next steps. A lower number
+                      means we are building a stronger foundation, not failure.
+                    </p>
+                    <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+                        Grading Key
                       </div>
-                    )}
+                      <ul className="mt-2 space-y-1 text-xs leading-relaxed text-gray-700">
+                        <li>
+                          <span className="font-semibold">1:</span> Reviewing
+                          basics and footwork foundation.
+                        </li>
+                        <li>
+                          <span className="font-semibold">2:</span> Needs
+                          refining; understands the move but needs more reps.
+                        </li>
+                        <li>
+                          <span className="font-semibold">3:</span> Good
+                          execution; basic footwork is showing consistently.
+                        </li>
+                        <li>
+                          <span className="font-semibold">4:</span> Above
+                          average in most situations.
+                        </li>
+                        <li>
+                          <span className="font-semibold">5:</span> Excellent,
+                          game-quality execution at speed.
+                        </li>
+                      </ul>
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {skillRatings.map((skill) => (
+                        <div
+                          key={skill.label}
+                          className="rounded-xl border border-gray-200 bg-white p-3"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm font-semibold text-gray-900">
+                              {skill.label}
+                            </div>
+                            <div className="text-xs font-semibold text-emerald-700">
+                              {skill.rating !== null
+                                ? `${skill.rating} / 5`
+                                : "No rating"}
+                            </div>
+                          </div>
+                          <p className="mt-2 text-sm leading-relaxed text-gray-700">
+                            {skill.notes?.trim() || "No notes yet."}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
