@@ -47,6 +47,15 @@ type ParentRow = {
   is_admin: boolean;
 };
 
+type UpcomingSignupRow = {
+  group_session_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  emergency_contact: string | null;
+};
+
 function parseDate(value: string | null) {
   if (!value) return null;
   const date = new Date(value);
@@ -140,6 +149,14 @@ function buildGroupSessionUrl(
   return query ? `${base}?${query}` : base;
 }
 
+function normalizeText(value: string | null | undefined) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function normalizeDigits(value: string | null | undefined) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
 export default async function PlayersPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/");
@@ -212,6 +229,68 @@ export default async function PlayersPage() {
     ORDER BY gs.session_date ASC, gs.created_at ASC
   `) as unknown as GroupSessionRow[];
   const playerForSignup = players[0] ?? null;
+
+  const upcomingSignups = (await sql`
+    SELECT
+      ps.group_session_id::text AS group_session_id,
+      ps.first_name,
+      ps.last_name,
+      ps.contact_email,
+      ps.contact_phone,
+      ps.emergency_contact
+    FROM player_signups ps
+    JOIN group_sessions gs ON gs.id = ps.group_session_id
+    WHERE COALESCE(gs.session_date_end, gs.session_date) >= NOW()
+  `) as unknown as UpcomingSignupRow[];
+
+  const playerFullNames = new Set(
+    players.map((player) => normalizeText(player.name)).filter(Boolean)
+  );
+  const playerFirstLast = new Set(
+    players
+      .map((player) => {
+        const split = splitPlayerName(player.name);
+        return `${normalizeText(split.firstName)}|${normalizeText(
+          split.lastName
+        )}`;
+      })
+      .filter((value) => value !== "|")
+  );
+  const parentEmail = normalizeText(parent.email);
+  const parentPhoneDigits = normalizeDigits(parent.phone);
+  const parentName = normalizeText(parent.name);
+
+  const alreadySignedUpSessionIds = new Set(
+    upcomingSignups
+      .filter((signup) => {
+        const signupEmail = normalizeText(signup.contact_email);
+        const signupPhoneDigits = normalizeDigits(signup.contact_phone);
+        const emergencyContactText = normalizeText(signup.emergency_contact);
+        const emergencyContactDigits = normalizeDigits(signup.emergency_contact);
+        const signupFirst = normalizeText(signup.first_name);
+        const signupLast = normalizeText(signup.last_name);
+        const signupFull = normalizeText(
+          `${signup.first_name ?? ""} ${signup.last_name ?? ""}`
+        );
+
+        const emailMatch = Boolean(parentEmail && signupEmail === parentEmail);
+        const phoneMatch = Boolean(
+          parentPhoneDigits &&
+            (signupPhoneDigits === parentPhoneDigits ||
+              emergencyContactDigits.includes(parentPhoneDigits))
+        );
+        const parentNameMatch = Boolean(
+          parentName && emergencyContactText.includes(parentName)
+        );
+        const playerNameMatch = Boolean(
+          (signupFull && playerFullNames.has(signupFull)) ||
+            playerFirstLast.has(`${signupFirst}|${signupLast}`)
+        );
+
+        return emailMatch || phoneMatch || parentNameMatch || playerNameMatch;
+      })
+      .map((signup) => signup.group_session_id)
+  );
 
   return (
     <div className="min-h-screen bg-emerald-50">
@@ -367,18 +446,23 @@ export default async function PlayersPage() {
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {groupSessions.map((groupSession) => (
-                <Link
-                  key={groupSession.id}
-                  href={buildGroupSessionUrl(
-                    groupSession.id,
-                    parent,
-                    playerForSignup
-                  )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group block overflow-hidden rounded-3xl border border-emerald-300 bg-emerald-500 shadow-sm transition hover:border-emerald-400 hover:shadow-md"
-                >
+              {groupSessions.map((groupSession) => {
+                const alreadySignedUp = alreadySignedUpSessionIds.has(
+                  groupSession.id
+                );
+
+                return (
+                  <Link
+                    key={groupSession.id}
+                    href={buildGroupSessionUrl(
+                      groupSession.id,
+                      parent,
+                      playerForSignup
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group block overflow-hidden rounded-3xl border border-emerald-300 bg-emerald-500 shadow-sm transition hover:border-emerald-400 hover:shadow-md"
+                  >
                   {groupSession.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -440,12 +524,21 @@ export default async function PlayersPage() {
                       </p>
                     ) : null}
 
+                    {alreadySignedUp ? (
+                      <p className="mt-4 rounded-lg bg-emerald-700/30 px-3 py-2 text-sm font-semibold text-white">
+                        Already signed up for this session
+                      </p>
+                    ) : null}
+
                     <div className="mt-6 inline-flex rounded-full bg-white px-5 py-2 text-lg font-bold text-emerald-900 transition group-hover:bg-emerald-50">
-                      View Details &amp; Sign Up
+                      {alreadySignedUp
+                        ? "Already Signed Up"
+                        : "View Details & Sign Up"}
                     </div>
                   </div>
                 </Link>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
