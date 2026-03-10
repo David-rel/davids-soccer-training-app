@@ -56,6 +56,8 @@ type UpcomingSignupRow = {
   emergency_contact: string | null;
 };
 
+const GROUP_TIME_ZONE = "America/Phoenix";
+
 function parseDate(value: string | null) {
   if (!value) return null;
   const date = new Date(value);
@@ -73,6 +75,7 @@ function formatSessionStart(value: string | null) {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: GROUP_TIME_ZONE,
   });
 }
 
@@ -82,6 +85,7 @@ function formatTime(value: string | null) {
   return date.toLocaleString("en-US", {
     hour: "numeric",
     minute: "2-digit",
+    timeZone: GROUP_TIME_ZONE,
   });
 }
 
