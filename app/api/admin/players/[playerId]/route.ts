@@ -31,6 +31,7 @@ type PlayerRow = {
   vision_recognition_notes: string | null;
   great_soccer_habits_rating: number | null;
   great_soccer_habits_notes: string | null;
+  notes_last_auto_refresh_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -85,6 +86,7 @@ export async function GET(
       vision_recognition_notes,
       great_soccer_habits_rating,
       great_soccer_habits_notes,
+      notes_last_auto_refresh_at,
       created_at,
       updated_at
     FROM players
@@ -288,6 +290,7 @@ export async function PATCH(
       vision_recognition_notes,
       great_soccer_habits_rating,
       great_soccer_habits_notes,
+      notes_last_auto_refresh_at,
       created_at,
       updated_at
   `) as unknown as PlayerRow[];

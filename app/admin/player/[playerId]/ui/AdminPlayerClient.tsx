@@ -35,6 +35,7 @@ type Player = {
   vision_recognition_notes: string | null;
   great_soccer_habits_rating: number | null;
   great_soccer_habits_notes: string | null;
+  notes_last_auto_refresh_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -114,6 +115,46 @@ type PlayerFeedback = {
   updated_at: string;
 };
 
+type ChecklistStep = "feedback" | "development" | "skills" | "goals";
+type ChecklistStatus = Record<ChecklistStep, boolean>;
+
+const INITIAL_CHECKLIST_STATUS: ChecklistStatus = {
+  feedback: false,
+  development: false,
+  skills: false,
+  goals: false,
+};
+
+const DEVELOPMENT_NOTE_FIELDS = [
+  "strengths",
+  "focus_areas",
+  "long_term_development_notes",
+] as const;
+
+const SKILL_FIELDS = [
+  "first_touch_rating",
+  "first_touch_notes",
+  "one_v_one_ability_rating",
+  "one_v_one_ability_notes",
+  "passing_technique_rating",
+  "passing_technique_notes",
+  "shot_technique_rating",
+  "shot_technique_notes",
+  "vision_recognition_rating",
+  "vision_recognition_notes",
+  "great_soccer_habits_rating",
+  "great_soccer_habits_notes",
+] as const;
+
+function hasFieldChanges<K extends keyof Player>(
+  original: Player | null,
+  next: Player | null,
+  fields: readonly K[],
+) {
+  if (!original || !next) return false;
+  return fields.some((field) => (original[field] ?? null) !== (next[field] ?? null));
+}
+
 async function api<T>(
   path: string,
   opts: RequestInit & { securityCode?: string },
@@ -122,6 +163,9 @@ async function api<T>(
     ...opts,
     headers: {
       "content-type": "application/json",
+      ...(opts.securityCode
+        ? { "x-security-code": opts.securityCode }
+        : {}),
       ...(opts.headers ?? {}),
     },
     cache: "no-store",
@@ -356,17 +400,43 @@ export default function AdminPlayerClient(props: {
   const [editSessionUploadingDocument, setEditSessionUploadingDocument] =
     useState(false);
   const [editSessionPublished, setEditSessionPublished] = useState(false);
+  const [showEndSessionChecklist, setShowEndSessionChecklist] = useState(false);
+  const [checklistStatus, setChecklistStatus] = useState<ChecklistStatus>(
+    INITIAL_CHECKLIST_STATUS,
+  );
+  const [savingDevelopmentNotes, setSavingDevelopmentNotes] = useState(false);
+  const [savingGeneralSkills, setSavingGeneralSkills] = useState(false);
+  const [autoRefreshingNotes, setAutoRefreshingNotes] = useState(false);
+  const [autoRefreshWithGoals, setAutoRefreshWithGoals] = useState(false);
 
   const computed = useMemo(
     () => calcBirthMeta(draft?.birthdate ?? null),
     [draft?.birthdate],
   );
 
+  const autoNotesMeta = useMemo(() => {
+    const raw = draft?.notes_last_auto_refresh_at;
+    if (!raw) return { stale: false, label: "Never" };
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) {
+      return { stale: false, label: "Never" };
+    }
+    const now = new Date();
+    const ageMs = now.getTime() - date.getTime();
+    const stale = ageMs >= 14 * 24 * 60 * 60 * 1000;
+    return {
+      stale,
+      label: date.toLocaleDateString(),
+    };
+  }, [draft?.notes_last_auto_refresh_at]);
+
   useEffect(() => {
     setPlayer(null);
     setDraft(null);
     setMsg(null);
     setErrMsg(null);
+    setShowEndSessionChecklist(false);
+    setChecklistStatus(INITIAL_CHECKLIST_STATUS);
     props.params.then(({ playerId }) => setPlayerId(playerId));
   }, [props.params]);
 
@@ -462,6 +532,7 @@ export default function AdminPlayerClient(props: {
     setNewGoalName("");
     setNewGoalDueDate("");
     await loadGoals(code, id);
+    markChecklistStepDone("goals");
   }
 
   async function saveGoal(
@@ -479,6 +550,7 @@ export default function AdminPlayerClient(props: {
       },
     );
     await loadGoals(code, playerId);
+    markChecklistStepDone("goals");
   }
 
   async function deleteGoal(code: string, playerId: string, goalId: string) {
@@ -487,6 +559,7 @@ export default function AdminPlayerClient(props: {
       securityCode: code,
     });
     await loadGoals(code, playerId);
+    markChecklistStepDone("goals");
   }
 
   async function loadSessions(code: string, id: string) {
@@ -541,7 +614,9 @@ export default function AdminPlayerClient(props: {
       setNewFeedbackRawContent("");
       await loadFeedback(code, id);
       setSelectedFeedbackId(data.feedback.id);
+      markChecklistStepDone("feedback");
       setMsg("Feedback created.");
+      scrollToSection("end-session-development-section");
     } finally {
       setCreatingFeedback(false);
     }
@@ -976,6 +1051,135 @@ export default function AdminPlayerClient(props: {
     setMsg("Profile deleted.");
   }
 
+  function markChecklistStepDone(step: ChecklistStep) {
+    setChecklistStatus((prev) => ({ ...prev, [step]: true }));
+  }
+
+  function toggleChecklistStep(step: ChecklistStep) {
+    setChecklistStatus((prev) => ({ ...prev, [step]: !prev[step] }));
+  }
+
+  function scrollToSection(id: string) {
+    const element = document.getElementById(id);
+    if (!element) return;
+    element.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function openEndSessionChecklist() {
+    setShowEndSessionChecklist(true);
+    setTimeout(() => scrollToSection("end-session-checklist"), 0);
+  }
+
+  async function saveDevelopmentNotes() {
+    if (!playerId || !draft) return;
+    setMsg(null);
+    setErrMsg(null);
+    setSavingDevelopmentNotes(true);
+    try {
+      const data = await api<{ player: Player }>(`/api/admin/players/${playerId}`, {
+        method: "PATCH",
+        securityCode,
+        body: JSON.stringify({
+          strengths: draft.strengths,
+          focus_areas: draft.focus_areas,
+          long_term_development_notes: draft.long_term_development_notes,
+        }),
+      });
+      setPlayer(data.player);
+      setDraft(data.player);
+      markChecklistStepDone("development");
+      setMsg("Development notes saved.");
+      scrollToSection("end-session-skills-section");
+    } catch (e) {
+      setErrMsg(
+        e instanceof Error ? e.message : "Failed to save development notes.",
+      );
+    } finally {
+      setSavingDevelopmentNotes(false);
+    }
+  }
+
+  async function saveGeneralSkills() {
+    if (!playerId || !draft) return;
+    setMsg(null);
+    setErrMsg(null);
+    setSavingGeneralSkills(true);
+    try {
+      const data = await api<{ player: Player }>(`/api/admin/players/${playerId}`, {
+        method: "PATCH",
+        securityCode,
+        body: JSON.stringify({
+          first_touch_rating: draft.first_touch_rating,
+          first_touch_notes: draft.first_touch_notes,
+          one_v_one_ability_rating: draft.one_v_one_ability_rating,
+          one_v_one_ability_notes: draft.one_v_one_ability_notes,
+          passing_technique_rating: draft.passing_technique_rating,
+          passing_technique_notes: draft.passing_technique_notes,
+          shot_technique_rating: draft.shot_technique_rating,
+          shot_technique_notes: draft.shot_technique_notes,
+          vision_recognition_rating: draft.vision_recognition_rating,
+          vision_recognition_notes: draft.vision_recognition_notes,
+          great_soccer_habits_rating: draft.great_soccer_habits_rating,
+          great_soccer_habits_notes: draft.great_soccer_habits_notes,
+        }),
+      });
+      setPlayer(data.player);
+      setDraft(data.player);
+      markChecklistStepDone("skills");
+      setMsg("General soccer skills saved.");
+      scrollToSection("end-session-goals-section");
+    } catch (e) {
+      setErrMsg(
+        e instanceof Error ? e.message : "Failed to save general soccer skills.",
+      );
+    } finally {
+      setSavingGeneralSkills(false);
+    }
+  }
+
+  async function autoRefreshNotesFromFeedback() {
+    if (!playerId) return;
+    setMsg(null);
+    setErrMsg(null);
+    setAutoRefreshingNotes(true);
+    try {
+      const data = await api<{
+        ok: true;
+        feedback_used: number;
+        goals_created: number;
+      }>(`/api/admin/players/${playerId}/auto-notes`, {
+        method: "POST",
+        securityCode,
+        body: JSON.stringify({ include_goals: autoRefreshWithGoals }),
+      });
+
+      await loadPlayer(securityCode, playerId);
+      if (autoRefreshWithGoals || data.goals_created > 0) {
+        await loadGoals(securityCode, playerId);
+      }
+
+      markChecklistStepDone("development");
+      markChecklistStepDone("skills");
+      if (autoRefreshWithGoals) {
+        markChecklistStepDone("goals");
+      }
+
+      setMsg(
+        `Auto-updated from ${data.feedback_used} feedback entries.${
+          autoRefreshWithGoals
+            ? ` Added ${data.goals_created} new coach goals.`
+            : ""
+        }`,
+      );
+    } catch (e) {
+      setErrMsg(
+        e instanceof Error ? e.message : "Failed to auto-update from feedback.",
+      );
+    } finally {
+      setAutoRefreshingNotes(false);
+    }
+  }
+
   const changed = useMemo(() => {
     if (!player || !draft) return false;
     return JSON.stringify(player) !== JSON.stringify(draft);
@@ -989,6 +1193,12 @@ export default function AdminPlayerClient(props: {
       feedbackEntries[0]
     );
   }, [feedbackEntries, selectedFeedbackId]);
+
+  const checklistCompletedCount = useMemo(
+    () => Object.values(checklistStatus).filter(Boolean).length,
+    [checklistStatus],
+  );
+  const allChecklistStepsComplete = checklistCompletedCount === 4;
 
   return (
     <div className="min-h-screen bg-emerald-50">
@@ -1158,6 +1368,118 @@ export default function AdminPlayerClient(props: {
                 </div>
               )}
 
+              {autoNotesMeta.stale && (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  Notes were last auto-updated on {autoNotesMeta.label}. This is
+                  older than 2 weeks, so run auto-update again.
+                </div>
+              )}
+
+              {showEndSessionChecklist && (
+                <div
+                  id="end-session-checklist"
+                  className="mt-6 rounded-3xl border border-emerald-300 bg-emerald-50/80 p-5"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        End of Session Checklist
+                      </div>
+                      <div className="mt-1 text-sm text-gray-700">
+                        Complete each step for {draft.name}. Steps can be marked
+                        automatically when you submit, or manually if no changes are
+                        needed.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setChecklistStatus(INITIAL_CHECKLIST_STATUS)}
+                      className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
+                    >
+                      Reset checklist
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    {[
+                      {
+                        step: "feedback" as const,
+                        title: "1. Submit feedback",
+                        targetId: "end-session-feedback-section",
+                      },
+                      {
+                        step: "development" as const,
+                        title:
+                          "2. Update strengths, focus areas, long-term development",
+                        targetId: "end-session-development-section",
+                      },
+                      {
+                        step: "skills" as const,
+                        title: "3. Update general soccer skills",
+                        targetId: "end-session-skills-section",
+                      },
+                      {
+                        step: "goals" as const,
+                        title: "4. Add / update / complete / delete goals",
+                        targetId: "end-session-goals-section",
+                      },
+                    ].map((item) => {
+                      const done = checklistStatus[item.step];
+                      return (
+                        <div
+                          key={item.step}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-white px-4 py-3"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span
+                              className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                                done
+                                  ? "bg-emerald-600 text-white"
+                                  : "bg-gray-200 text-gray-600"
+                              }`}
+                            >
+                              {done ? "x" : ""}
+                            </span>
+                            <div className="text-sm font-medium text-gray-900">
+                              {item.title}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => scrollToSection(item.targetId)}
+                              className="rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
+                            >
+                              Go to section
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleChecklistStep(item.step)}
+                              className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                                done
+                                  ? "border border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                                  : "bg-emerald-600 text-white hover:bg-emerald-700"
+                              }`}
+                            >
+                              {done ? "Undo" : "Mark done"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-4 text-sm text-gray-700">
+                    {checklistCompletedCount}/4 complete
+                  </div>
+                  {allChecklistStepsComplete && (
+                    <div className="mt-2 rounded-xl border border-emerald-300 bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-800">
+                      Checklist complete for this player.
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Profile Picture Display */}
               {draft.profile_photo_url && (
                 <div className="mt-6 flex items-center gap-4">
@@ -1236,7 +1558,48 @@ export default function AdminPlayerClient(props: {
                 />
               </div>
 
-              <div className="mt-6 grid gap-4">
+              <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-blue-900">
+                      Auto-update notes from feedback
+                    </div>
+                    <div className="mt-1 text-sm text-blue-800">
+                      Uses the latest 4 feedback entries to regenerate strengths,
+                      focus areas, long-term development, and general soccer skills.
+                    </div>
+                    <div className="mt-1 text-xs text-blue-700">
+                      Last auto-update: {autoNotesMeta.label}
+                    </div>
+                  </div>
+
+                  <div className="flex min-w-[280px] flex-col items-end gap-3">
+                    <label className="flex items-center gap-2 text-sm text-blue-900">
+                      <input
+                        type="checkbox"
+                        checked={autoRefreshWithGoals}
+                        onChange={(e) => setAutoRefreshWithGoals(e.target.checked)}
+                        className="h-4 w-4 accent-blue-600"
+                      />
+                      Also create 2 new coach goals
+                    </label>
+                    <button
+                      type="button"
+                      disabled={autoRefreshingNotes || !playerId}
+                      onClick={() => {
+                        void autoRefreshNotesFromFeedback();
+                      }}
+                      className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {autoRefreshingNotes
+                        ? "Auto-updating..."
+                        : "Auto-update from feedback"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div id="end-session-development-section" className="mt-6 grid gap-4">
                 <TextArea
                   label="Strengths"
                   value={draft.strengths ?? ""}
@@ -1261,7 +1624,22 @@ export default function AdminPlayerClient(props: {
                 />
               </div>
 
-              <div className="mt-6 space-y-3">
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  disabled={savingDevelopmentNotes || !playerId}
+                  onClick={() => {
+                    void saveDevelopmentNotes();
+                  }}
+                  className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingDevelopmentNotes
+                    ? "Saving..."
+                    : "Save development notes"}
+                </button>
+              </div>
+
+              <div id="end-session-skills-section" className="mt-6 space-y-3">
                 <div>
                   <div className="text-sm font-semibold text-gray-900">
                     General soccer skills
@@ -1342,9 +1720,27 @@ export default function AdminPlayerClient(props: {
                     setDraft({ ...draft, great_soccer_habits_notes: value })
                   }
                 />
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    disabled={savingGeneralSkills || !playerId}
+                    onClick={() => {
+                      void saveGeneralSkills();
+                    }}
+                    className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {savingGeneralSkills
+                      ? "Saving..."
+                      : "Save general soccer skills"}
+                  </button>
+                </div>
               </div>
 
-              <div className="mt-8 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
+              <div
+                id="end-session-feedback-section"
+                className="mt-8 rounded-3xl border border-emerald-200 bg-emerald-50 p-5"
+              >
                 <div>
                   <div className="text-sm font-semibold text-gray-900">
                     Player feedback
@@ -1522,7 +1918,10 @@ export default function AdminPlayerClient(props: {
                 </div>
               </div>
 
-              <div className="mt-8 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
+              <div
+                id="end-session-goals-section"
+                className="mt-8 rounded-3xl border border-emerald-200 bg-emerald-50 p-5"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-gray-900">
@@ -2441,6 +2840,16 @@ export default function AdminPlayerClient(props: {
                       setErrMsg("Name is required.");
                       return;
                     }
+                    const developmentChanged = hasFieldChanges(
+                      player,
+                      draft,
+                      DEVELOPMENT_NOTE_FIELDS,
+                    );
+                    const skillsChanged = hasFieldChanges(
+                      player,
+                      draft,
+                      SKILL_FIELDS,
+                    );
 
                     startTransition(async () => {
                       try {
@@ -2486,6 +2895,8 @@ export default function AdminPlayerClient(props: {
                         );
                         setPlayer(data.player);
                         setDraft(data.player);
+                        if (developmentChanged) markChecklistStepDone("development");
+                        if (skillsChanged) markChecklistStepDone("skills");
                         setMsg("Saved.");
                       } catch (e) {
                         setErrMsg(
@@ -2530,6 +2941,15 @@ export default function AdminPlayerClient(props: {
                 <p className="mt-1 text-sm text-gray-600">
                   Create a test entry for this player.
                 </p>
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={openEndSessionChecklist}
+                    className="w-full rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-100"
+                  >
+                    End of Session Checklist
+                  </button>
+                </div>
 
                 <div className="mt-5 grid gap-4">
                   <div className="space-y-1.5">
