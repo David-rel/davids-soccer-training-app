@@ -58,6 +58,7 @@ export default function SessionCheckoutForm({
   const [emergencyContact, setEmergencyContact] = useState(defaultEmergencyContact);
   const [contactPhone, setContactPhone] = useState(defaultContactPhone);
   const [contactEmail, setContactEmail] = useState(defaultContactEmail);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -124,6 +125,11 @@ export default function SessionCheckoutForm({
       return;
     }
 
+    if (!termsAccepted) {
+      setError("You must agree to the Group Training Terms and Conditions.");
+      return;
+    }
+
     setError("");
     setIsSubmitting(true);
 
@@ -139,6 +145,7 @@ export default function SessionCheckoutForm({
           emergencyContact,
           contactPhone,
           contactEmail,
+          termsAccepted,
         }),
       });
 
@@ -281,6 +288,28 @@ export default function SessionCheckoutForm({
         </p>
       </div>
 
+      <label className="mt-5 flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+        <input
+          type="checkbox"
+          checked={termsAccepted}
+          onChange={(event) => setTermsAccepted(event.target.checked)}
+          required
+          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+        />
+        <span className="text-sm text-gray-700">
+          I agree to the{" "}
+          <a
+            href="https://wryahmjgsiuml9bg.public.blob.vercel-storage.com/Group%20Training%20Terms%20and%20Conditions%20-%20Google%20Docs.pdf"
+            target="_blank"
+            rel="noreferrer"
+            className="font-semibold text-emerald-700 underline underline-offset-2"
+          >
+            Group Training Terms and Conditions
+          </a>
+          .
+        </span>
+      </label>
+
       {error ? <p className="text-red-600 text-sm mt-4">{error}</p> : null}
 
       <div className="mt-6">
@@ -292,7 +321,8 @@ export default function SessionCheckoutForm({
             players.length === 0 ||
             allAlreadySigned ||
             selectedCount === 0 ||
-            selectedCount > spotsLeft
+            selectedCount > spotsLeft ||
+            !termsAccepted
           }
           className="inline-flex items-center justify-center rounded-full bg-emerald-600 text-white px-6 py-3 font-semibold hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
         >

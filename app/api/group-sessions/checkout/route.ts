@@ -9,10 +9,21 @@ import {
   provisionParentAndPlayerForGroupSignup,
   updatePlayerSignupsCheckout,
 } from "@/lib/groupSessions";
+import { sendNewParentSignupEmail } from "@/lib/email";
+import { normalizePhoneForStorage } from "@/lib/phone";
 import { getStripe } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
 const GROUP_TIME_ZONE = "America/Phoenix";
+
+type GuestPlayerInput = {
+  firstName?: string;
+  lastName?: string;
+  birthday?: string;
+  preferredFoot?: string;
+  team?: string;
+  notes?: string;
+};
 
 type CheckoutBody = {
   groupSessionId?: number | string;
@@ -20,6 +31,10 @@ type CheckoutBody = {
   emergencyContact?: string;
   contactPhone?: string;
   contactEmail?: string;
+  parentName?: string;
+  parentPassword?: string;
+  termsAccepted?: boolean;
+  players?: GuestPlayerInput[];
 };
 
 type ParentRow = {
@@ -47,8 +62,28 @@ type PaidSignupRow = {
   emergency_contact: string | null;
 };
 
+type CheckoutPlayer = {
+  name: string;
+  firstName: string;
+  lastName: string;
+  birthdate: string | null;
+  age: number;
+  dominantFoot: string | null;
+  teamLevel: string | null;
+  notes: string | null;
+};
+
 function cleanText(input: unknown) {
   return (input || "").toString().trim();
+}
+
+function cleanNullable(input: unknown) {
+  const value = cleanText(input);
+  return value || null;
+}
+
+function isValidEmail(input: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input);
 }
 
 function normalizeText(value: string | null | undefined) {
@@ -127,10 +162,7 @@ function formatTimeRange(startInput: string, endInput: string | null) {
 export async function POST(request: NextRequest) {
   try {
     const authSession = await getServerSession(authOptions);
-    if (!authSession?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const parentId = authSession.user.id;
+    const signedInParentId = authSession?.user?.id ?? null;
 
     if (!process.env.STRIPE_SECRET_KEY) {
       return NextResponse.json(
@@ -141,6 +173,12 @@ export async function POST(request: NextRequest) {
     const stripe = getStripe();
 
     const body = (await request.json()) as CheckoutBody;
+    if (body.termsAccepted !== true) {
+      return NextResponse.json(
+        { error: "You must agree to the Group Training Terms and Conditions." },
+        { status: 400 }
+      );
+    }
     const groupSessionId = parseGroupSessionInput(body.groupSessionId);
 
     if (groupSessionId === null || !Number.isInteger(groupSessionId) || groupSessionId <= 0) {
@@ -150,49 +188,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rawPlayerIds = Array.isArray(body.playerIds) ? body.playerIds : [];
-    const playerIds = Array.from(
-      new Set(rawPlayerIds.map((id) => cleanText(id)).filter(Boolean))
-    );
-
-    if (playerIds.length === 0) {
-      return NextResponse.json(
-        { error: "Select at least one player for signup" },
-        { status: 400 }
-      );
-    }
-
-    const parentRows = (await sql`
-      SELECT email, phone, name
-      FROM parents
-      WHERE id = ${parentId}
-      LIMIT 1
-    `) as unknown as ParentRow[];
-
-    const parent = parentRows[0];
-    if (!parent) {
-      return NextResponse.json({ error: "Parent account not found" }, { status: 404 });
-    }
-
-    const emergencyContact = cleanText(body.emergencyContact || parent.name || "Parent");
-    const contactPhone = cleanText(body.contactPhone || parent.phone || "");
-    const contactEmail = cleanText(body.contactEmail || parent.email || "").toLowerCase();
-
-    if (!emergencyContact || !contactEmail) {
-      return NextResponse.json(
-        { error: "Emergency contact and contact email are required" },
-        { status: 400 }
-      );
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
-      return NextResponse.json(
-        { error: "A valid contact email is required" },
-        { status: 400 }
-      );
-    }
-
     const session = await getGroupSessionById(groupSessionId);
-
     if (!session) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
@@ -211,17 +207,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (playerIds.length > session.spots_left) {
-      return NextResponse.json(
-        {
-          error: `Only ${session.spots_left} ${
-            session.spots_left === 1 ? "spot is" : "spots are"
-          } left for this session`,
-        },
-        { status: 400 }
-      );
-    }
-
     const price = Number(session.price || 0);
     if (!Number.isFinite(price) || price <= 0) {
       return NextResponse.json(
@@ -230,46 +215,259 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const allPlayers = (await sql`
-      SELECT
-        id,
-        name,
-        birthdate::text AS birthdate,
-        age::int AS age,
-        dominant_foot,
-        team_level,
-        focus_areas,
-        long_term_development_notes
-      FROM players
-      WHERE parent_id = ${parentId}
-      ORDER BY created_at ASC
-    `) as unknown as PlayerRow[];
+    let emergencyContact = "";
+    let contactPhone = "";
+    let contactEmail = "";
+    let selectedPlayers: CheckoutPlayer[] = [];
+    let parentPortalEmail = "";
+    let parentPasswordForProvision: string | null = null;
+    let existingParentIdForProvision = signedInParentId;
+    let parentNameForMatching: string | null = null;
 
-    const playerIdSet = new Set(playerIds);
-    const selectedPlayers = allPlayers.filter((player) => playerIdSet.has(player.id));
+    if (signedInParentId) {
+      const rawPlayerIds = Array.isArray(body.playerIds) ? body.playerIds : [];
+      const playerIds = Array.from(
+        new Set(rawPlayerIds.map((id) => cleanText(id)).filter(Boolean))
+      );
 
-    if (selectedPlayers.length !== playerIds.length) {
+      if (playerIds.length === 0) {
+        return NextResponse.json(
+          { error: "Select at least one player for signup" },
+          { status: 400 }
+        );
+      }
+
+      const parentRows = (await sql`
+        SELECT email, phone, name
+        FROM parents
+        WHERE id = ${signedInParentId}
+        LIMIT 1
+      `) as unknown as ParentRow[];
+
+      const parent = parentRows[0];
+      if (!parent) {
+        return NextResponse.json(
+          { error: "Parent account not found" },
+          { status: 404 }
+        );
+      }
+
+      emergencyContact = cleanText(body.emergencyContact || parent.name || "Parent");
+      contactPhone = cleanText(body.contactPhone || parent.phone || "");
+      contactEmail = cleanText(body.contactEmail || parent.email || "").toLowerCase();
+
+      if (!emergencyContact || !contactEmail) {
+        return NextResponse.json(
+          { error: "Emergency contact and contact email are required" },
+          { status: 400 }
+        );
+      }
+      if (!isValidEmail(contactEmail)) {
+        return NextResponse.json(
+          { error: "A valid contact email is required" },
+          { status: 400 }
+        );
+      }
+
+      const allPlayers = (await sql`
+        SELECT
+          id,
+          name,
+          birthdate::text AS birthdate,
+          age::int AS age,
+          dominant_foot,
+          team_level,
+          focus_areas,
+          long_term_development_notes
+        FROM players
+        WHERE parent_id = ${signedInParentId}
+        ORDER BY created_at ASC
+      `) as unknown as PlayerRow[];
+
+      const playerIdSet = new Set(playerIds);
+      const selectedProfilePlayers = allPlayers.filter((player) =>
+        playerIdSet.has(player.id)
+      );
+
+      if (selectedProfilePlayers.length !== playerIds.length) {
+        return NextResponse.json(
+          { error: "One or more selected players could not be found" },
+          { status: 400 }
+        );
+      }
+
+      const playersMissingAge = selectedProfilePlayers
+        .filter((player) => {
+          const ageFromBirthdate = calculateAgeFromBirthdate(player.birthdate);
+          const ageFromField =
+            Number.isInteger(player.age) && player.age !== null && player.age > 0
+              ? player.age
+              : null;
+          return ageFromBirthdate === null && ageFromField === null;
+        })
+        .map((player) => player.name);
+
+      if (playersMissingAge.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Missing birthday/age for: ${playersMissingAge.join(", ")}. Update player profile first.`,
+          },
+          { status: 400 }
+        );
+      }
+
+      selectedPlayers = selectedProfilePlayers.map((player) => {
+        const split = splitPlayerName(player.name);
+        return {
+          name: player.name,
+          firstName: split.firstName,
+          lastName: split.lastName || "Player",
+          birthdate: player.birthdate,
+          age: calculateAgeFromBirthdate(player.birthdate) ?? player.age ?? 0,
+          dominantFoot: cleanNullable(player.dominant_foot),
+          teamLevel: cleanNullable(player.team_level),
+          notes: cleanNullable(
+            player.focus_areas || player.long_term_development_notes || ""
+          ),
+        };
+      });
+
+      parentPortalEmail = parent.email?.trim().toLowerCase() || contactEmail;
+      parentNameForMatching = parent.name;
+    } else {
+      const parentName = cleanText(body.parentName || body.emergencyContact);
+      const rawEmail = cleanText(body.contactEmail).toLowerCase();
+      const rawPhone = cleanText(body.contactPhone);
+      const parentPassword = cleanText(body.parentPassword);
+      const guestPlayers = Array.isArray(body.players) ? body.players : [];
+
+      if (!parentName || !rawEmail || !rawPhone || !parentPassword) {
+        return NextResponse.json(
+          {
+            error:
+              "Parent name, email, phone, and password are required to sign up.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (!isValidEmail(rawEmail)) {
+        return NextResponse.json(
+          { error: "A valid parent email is required" },
+          { status: 400 }
+        );
+      }
+
+      if (parentPassword.length < 6) {
+        return NextResponse.json(
+          { error: "Password must be at least 6 characters" },
+          { status: 400 }
+        );
+      }
+
+      const normalizedPhone = normalizePhoneForStorage(rawPhone);
+      if (!normalizedPhone) {
+        return NextResponse.json(
+          { error: "A valid parent phone is required" },
+          { status: 400 }
+        );
+      }
+
+      const emailConflict = (await sql`
+        SELECT id
+        FROM parents
+        WHERE lower(email) = lower(${rawEmail})
+        LIMIT 1
+      `) as unknown as Array<{ id: string }>;
+
+      if (emailConflict[0]) {
+        return NextResponse.json(
+          {
+            error:
+              "An account with this email already exists. Log in to continue signup.",
+          },
+          { status: 409 }
+        );
+      }
+
+      const phoneDigits = normalizeDigits(normalizedPhone);
+      const phoneConflict = (await sql`
+        SELECT id
+        FROM parents
+        WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${phoneDigits}
+        LIMIT 1
+      `) as unknown as Array<{ id: string }>;
+
+      if (phoneConflict[0]) {
+        return NextResponse.json(
+          {
+            error:
+              "An account with this phone already exists. Log in to continue signup.",
+          },
+          { status: 409 }
+        );
+      }
+
+      if (guestPlayers.length === 0) {
+        return NextResponse.json(
+          { error: "Add at least one player for signup" },
+          { status: 400 }
+        );
+      }
+
+      selectedPlayers = guestPlayers.map((player, index) => {
+        const firstName = cleanText(player.firstName);
+        const lastName = cleanText(player.lastName);
+        const birthday = cleanText(player.birthday);
+
+        if (!firstName || !lastName) {
+          throw new Error(`Player ${index + 1}: first and last name are required.`);
+        }
+
+        if (!birthday) {
+          throw new Error(`Player ${index + 1}: birthday is required.`);
+        }
+
+        const age = calculateAgeFromBirthdate(birthday);
+        if (age === null) {
+          throw new Error(
+            `Player ${index + 1}: please enter a valid birthday (age 1-99).`
+          );
+        }
+
+        return {
+          name: `${firstName} ${lastName}`.trim(),
+          firstName,
+          lastName,
+          birthdate: birthday,
+          age,
+          dominantFoot: cleanNullable(player.preferredFoot),
+          teamLevel: cleanNullable(player.team),
+          notes: cleanNullable(player.notes),
+        };
+      });
+
+      emergencyContact = parentName;
+      contactEmail = rawEmail;
+      contactPhone = normalizedPhone;
+      parentPortalEmail = rawEmail;
+      parentPasswordForProvision = parentPassword;
+      parentNameForMatching = parentName;
+    }
+
+    if (selectedPlayers.length === 0) {
       return NextResponse.json(
-        { error: "One or more selected players could not be found" },
+        { error: "Select at least one player for signup" },
         { status: 400 }
       );
     }
 
-    const playersMissingAge = selectedPlayers
-      .filter((player) => {
-        const ageFromBirthdate = calculateAgeFromBirthdate(player.birthdate);
-        const ageFromField =
-          Number.isInteger(player.age) && player.age !== null && player.age > 0
-            ? player.age
-            : null;
-        return ageFromBirthdate === null && ageFromField === null;
-      })
-      .map((player) => player.name);
-
-    if (playersMissingAge.length > 0) {
+    if (selectedPlayers.length > session.spots_left) {
       return NextResponse.json(
         {
-          error: `Missing birthday/age for: ${playersMissingAge.join(", ")}. Update player profile first.`,
+          error: `Only ${session.spots_left} ${
+            session.spots_left === 1 ? "spot is" : "spots are"
+          } left for this session`,
         },
         { status: 400 }
       );
@@ -289,16 +487,16 @@ export async function POST(request: NextRequest) {
 
     const selectedNamePairs = new Set<string>();
     for (const player of selectedPlayers) {
-      const split = splitPlayerName(player.name);
-      const first = normalizeText(split.firstName);
-      const last = normalizeText(split.lastName);
+      const first = normalizeText(player.firstName);
+      const last = normalizeText(player.lastName);
       if (!first) continue;
       selectedNamePairs.add(`${first}|${last}`);
       if (!last) selectedNamePairs.add(`${first}|player`);
     }
+
     const parentEmail = normalizeText(contactEmail);
-    const parentPhoneDigits = normalizeDigits(contactPhone || parent.phone);
-    const parentName = normalizeText(emergencyContact || parent.name);
+    const parentPhoneDigits = normalizeDigits(contactPhone);
+    const parentName = normalizeText(emergencyContact || parentNameForMatching);
 
     const alreadyPaidPlayerNames = Array.from(
       new Set(
@@ -352,43 +550,41 @@ export async function POST(request: NextRequest) {
 
     const signupIds: number[] = [];
     const playerNames: string[] = [];
-    let parentPortalEmail = parent.email?.trim().toLowerCase() || contactEmail;
     let generatedPassword: string | null = null;
     let parentWasCreated = false;
 
     for (const player of selectedPlayers) {
-      const { firstName, lastName } = splitPlayerName(player.name);
-      if (!firstName) {
+      if (!player.firstName) {
         return NextResponse.json(
-          { error: `Player name is required for ${player.id}` },
+          { error: `Player name is required for ${player.name || "signup"}` },
           { status: 400 }
         );
       }
-
-      const age = calculateAgeFromBirthdate(player.birthdate) ?? player.age;
-      if (!age || age < 1 || age > 99) {
+      if (!player.age || player.age < 1 || player.age > 99) {
         return NextResponse.json(
           { error: `A valid age is required for ${player.name}` },
           { status: 400 }
         );
       }
 
-      const notes = cleanText(player.focus_areas || player.long_term_development_notes || "");
-
       const accountProvision = await provisionParentAndPlayerForGroupSignup({
-        existingParentId: parentId,
+        existingParentId: existingParentIdForProvision,
+        portalPassword: parentPasswordForProvision,
         contactEmail,
         contactPhone: contactPhone || null,
         parentName: emergencyContact || null,
-        firstName,
-        lastName: lastName || "Player",
-        playerAge: age,
+        firstName: player.firstName,
+        lastName: player.lastName || "Player",
+        playerAge: player.age,
         playerBirthdate: player.birthdate,
-        foot: player.dominant_foot || null,
-        team: player.team_level || null,
-        notes: notes || null,
+        foot: player.dominantFoot,
+        team: player.teamLevel,
+        notes: player.notes,
         crmContextNote,
       });
+
+      existingParentIdForProvision = accountProvision.parentId;
+      parentPasswordForProvision = null;
 
       if (!generatedPassword && accountProvision.generatedPassword) {
         generatedPassword = accountProvision.generatedPassword;
@@ -398,19 +594,32 @@ export async function POST(request: NextRequest) {
 
       const signup = await createPlayerSignup({
         group_session_id: groupSessionId,
-        first_name: firstName,
-        last_name: lastName || "Player",
+        first_name: player.firstName,
+        last_name: player.lastName || "Player",
         emergency_contact: emergencyContact,
         contact_phone: contactPhone || null,
         contact_email: contactEmail,
         birthday: player.birthdate,
-        foot: player.dominant_foot || null,
-        team: player.team_level || null,
-        notes: notes || null,
+        foot: player.dominantFoot,
+        team: player.teamLevel,
+        notes: player.notes,
       });
 
       signupIds.push(signup.id);
       playerNames.push(player.name);
+    }
+
+    if (parentWasCreated) {
+      const createdAtLabel = new Date().toLocaleString("en-US", {
+        dateStyle: "full",
+        timeStyle: "short",
+        timeZone: GROUP_TIME_ZONE,
+      });
+      void sendNewParentSignupEmail({
+        email: contactEmail,
+        phone: contactPhone || "N/A",
+        createdAt: createdAtLabel,
+      });
     }
 
     const siteUrl =
@@ -449,6 +658,7 @@ export async function POST(request: NextRequest) {
         parent_portal_email: parentPortalEmail,
         parent_portal_password: generatedPassword || "",
         parent_portal_is_new: parentWasCreated ? "true" : "false",
+        terms_accepted: "true",
       },
     });
 
@@ -476,10 +686,13 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to start checkout";
     console.error("Failed to create checkout session", error);
-    return NextResponse.json(
-      { error: "Failed to start checkout" },
-      { status: 500 }
-    );
+
+    if (message.startsWith("Player ")) {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+
+    return NextResponse.json({ error: "Failed to start checkout" }, { status: 500 });
   }
 }

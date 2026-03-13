@@ -9,6 +9,7 @@ import { sql } from "@/db";
 import { getGroupSessionById } from "@/lib/groupSessions";
 
 import CheckoutStatusModal from "./CheckoutStatusModal";
+import GuestSessionSignupForm from "./GuestSessionSignupForm";
 import SessionCheckoutForm from "./SessionCheckoutForm";
 
 export const dynamic = "force-dynamic";
@@ -217,7 +218,6 @@ export default async function GroupSessionDetailPage({ params }: PageProps) {
 
   const isFull = session.spots_left <= 0;
   const callbackUrl = `/group-sessions/${session.id}`;
-  const encodedCallbackUrl = encodeURIComponent(callbackUrl);
 
   return (
     <div className="min-h-screen bg-linear-to-b from-white to-emerald-50">
@@ -304,26 +304,12 @@ export default async function GroupSessionDetailPage({ params }: PageProps) {
                   defaultContactPhone={parent.phone ?? ""}
                 />
               ) : (
-                <div className="bg-white rounded-3xl border-2 border-emerald-100 shadow-xl p-6 md:p-8">
-                  <h2 className="text-2xl font-bold text-gray-900">Log in or create account</h2>
-                  <p className="mt-3 text-gray-600">
-                    To complete signup and checkout, log in to your parent portal or create a new account.
-                  </p>
-                  <div className="mt-6 flex flex-wrap gap-3">
-                    <Link
-                      href={`/login?callbackUrl=${encodedCallbackUrl}`}
-                      className="rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
-                    >
-                      Log in
-                    </Link>
-                    <Link
-                      href={`/signup?callbackUrl=${encodedCallbackUrl}`}
-                      className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
-                    >
-                      Create account
-                    </Link>
-                  </div>
-                </div>
+                <GuestSessionSignupForm
+                  sessionId={session.id}
+                  isFull={isFull}
+                  spotsLeft={session.spots_left}
+                  sessionPrice={session.price}
+                />
               )}
             </div>
           </div>

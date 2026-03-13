@@ -186,6 +186,7 @@ export async function getGroupSessionById(
 
 export async function provisionParentAndPlayerForGroupSignup(data: {
   existingParentId?: string | null;
+  portalPassword?: string | null;
   contactEmail: string;
   contactPhone?: string | null;
   parentName?: string | null;
@@ -311,8 +312,9 @@ export async function provisionParentAndPlayerForGroupSignup(data: {
       }
     }
   } else {
-    generatedPassword = generatePortalPassword(10);
-    const passwordHash = await bcrypt.hash(generatedPassword, 10);
+    const passwordToStore = cleanNullableText(data.portalPassword) || generatePortalPassword(10);
+    generatedPassword = cleanNullableText(data.portalPassword) ? null : passwordToStore;
+    const passwordHash = await bcrypt.hash(passwordToStore, 10);
 
     let phoneForInsert = parentPhone;
     if (phoneForInsert) {
