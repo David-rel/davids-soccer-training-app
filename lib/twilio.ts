@@ -29,7 +29,14 @@ export type TwilioSmsResult = {
   status: string | null;
 };
 
-export async function sendSmsViaTwilio(body: string): Promise<TwilioSmsResult> {
+type SendSmsOptions = {
+  to?: string;
+};
+
+export async function sendSmsViaTwilio(
+  body: string,
+  options?: SendSmsOptions
+): Promise<TwilioSmsResult> {
   const accountSid = String(process.env.TWILIO_ACCOUNT_SID ?? "").trim();
   const authToken = String(process.env.TWILIO_AUTH_TOKEN ?? "").trim();
   if (!accountSid || !authToken) {
@@ -37,9 +44,10 @@ export async function sendSmsViaTwilio(body: string): Promise<TwilioSmsResult> {
   }
 
   const from = toE164(process.env.TWILIO_PHONE_NUMBER, "TWILIO_PHONE_NUMBER");
+  const toRaw = options?.to ?? process.env.BIRTHDAY_ALERT_TO_PHONE;
   const to = toE164(
-    process.env.BIRTHDAY_ALERT_TO_PHONE,
-    "BIRTHDAY_ALERT_TO_PHONE"
+    toRaw,
+    options?.to ? "TWILIO_SMS_TO_PHONE" : "BIRTHDAY_ALERT_TO_PHONE"
   );
 
   const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");

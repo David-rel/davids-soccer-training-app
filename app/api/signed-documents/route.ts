@@ -8,6 +8,7 @@ import {
   normalizeComparableName,
   PRIVATE_TRAINING_WAIVER_DOCUMENT,
 } from "@/lib/signedDocuments";
+import { sendSmsViaTwilio } from "@/lib/twilio";
 
 type CreateSignedDocumentBody = {
   playerId?: string | null;
@@ -214,6 +215,19 @@ export async function POST(request: NextRequest) {
     if (!inserted) {
       return NextResponse.json({ error: "Could not save signed document." }, { status: 500 });
     }
+
+    const signedDocumentAlertPhone =
+      String(process.env.SIGNED_DOCUMENT_ALERT_TO_PHONE ?? "").trim() ||
+      "7206122980";
+    const signedDateLabel = new Date(`${signatureDate}T12:00:00.000Z`).toLocaleDateString(
+      "en-US",
+      { timeZone: "America/Phoenix", year: "numeric", month: "long", day: "numeric" }
+    );
+    const smsBody = `Waiver signed: ${parentName} signed the 1-on-1 private training contract for ${playerName} on ${signedDateLabel}.`;
+
+    void sendSmsViaTwilio(smsBody, { to: signedDocumentAlertPhone }).catch((smsError) => {
+      console.error("Failed to send signed-document SMS alert", smsError);
+    });
 
     return NextResponse.json(
       {
