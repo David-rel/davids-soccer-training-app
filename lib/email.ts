@@ -31,6 +31,12 @@ export type NewContentSubmissionEmailParams = {
   description?: string | null;
 };
 
+export type NewParentSignupEmailParams = {
+  email: string;
+  phone: string;
+  createdAt: string;
+};
+
 export async function sendNewContentSubmissionEmail(
   params: NewContentSubmissionEmailParams
 ): Promise<{ success: boolean; error?: string }> {
@@ -83,6 +89,41 @@ export async function sendNewContentSubmissionEmail(
     return { success: true };
   } catch (error) {
     console.error("Email send error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to send email",
+    };
+  }
+}
+
+export async function sendNewParentSignupEmail(
+  params: NewParentSignupEmailParams
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const transport = getTransporter();
+
+    await transport.sendMail({
+      from: `"Davids Private Training App" <${GMAIL_USER}>`,
+      to: RECIPIENT_EMAIL,
+      subject: `New Parent Signup - ${params.email}`,
+      html: `
+        <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #059669;">New Parent Signup</h2>
+          <p style="color: #374151; font-size: 16px;">
+            A new parent account was created in the app.
+          </p>
+          <div style="background: #f0fdf4; border-left: 4px solid #059669; padding: 16px; margin: 20px 0;">
+            <p style="margin: 0 0 8px 0; color: #374151;"><strong>Email:</strong> ${params.email}</p>
+            <p style="margin: 0 0 8px 0; color: #374151;"><strong>Phone:</strong> ${params.phone}</p>
+            <p style="margin: 0; color: #374151;"><strong>Created:</strong> ${params.createdAt}</p>
+          </div>
+        </div>
+      `,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Parent signup email send error:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to send email",

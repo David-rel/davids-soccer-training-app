@@ -3,11 +3,10 @@ import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/lib/auth";
 import { sql } from "@/db";
-import { SignOutButton } from "@/app/ui/SignOutButton";
 import Image from "next/image";
 import Link from "next/link";
 import { ageGroupFromAge, calculateAgeFromBirthdate } from "@/lib/playerAge";
-import { ParentAccountSettings } from "@/app/players/ui/ParentAccountSettings";
+import { ParentPortalHeader } from "@/app/ui/ParentPortalHeader";
 
 type PlayerRow = {
   id: string;
@@ -114,43 +113,8 @@ function splitPlayerName(name: string) {
   return { firstName, lastName: rest.join(" ") };
 }
 
-function setParamIfPresent(
-  params: URLSearchParams,
-  key: string,
-  value: string | null | undefined
-) {
-  const v = String(value ?? "").trim();
-  if (v) params.set(key, v);
-}
-
-function buildGroupSessionUrl(
-  sessionId: string,
-  parent: ParentRow,
-  player: PlayerRow | null
-) {
-  const params = new URLSearchParams();
-
-  if (player) {
-    const { firstName, lastName } = splitPlayerName(player.name);
-    setParamIfPresent(params, "kidFirstName", firstName);
-    setParamIfPresent(params, "kidLastName", lastName);
-    setParamIfPresent(params, "birthday", player.birthdate);
-    setParamIfPresent(params, "preferredFoot", player.dominant_foot);
-    setParamIfPresent(params, "team", player.team_level);
-    setParamIfPresent(
-      params,
-      "notes",
-      player.focus_areas ?? player.long_term_development_notes
-    );
-  }
-
-  setParamIfPresent(params, "parentName", parent.name);
-  setParamIfPresent(params, "email", parent.email);
-  setParamIfPresent(params, "phone", parent.phone);
-
-  const query = params.toString();
-  const base = `https://www.davidssoccertraining.com/group-sessions/${sessionId}`;
-  return query ? `${base}?${query}` : base;
+function buildGroupSessionUrl(sessionId: string) {
+  return `/group-sessions/${sessionId}`;
 }
 
 function normalizeText(value: string | null | undefined) {
@@ -163,10 +127,14 @@ function normalizeDigits(value: string | null | undefined) {
 
 export default async function PlayersPage() {
   const session = await getServerSession(authOptions);
-  if (!session?.user) redirect("/");
+  if (!session?.user) {
+    redirect("/login?callbackUrl=%2Fplayers");
+  }
 
   const parentId = session.user.id;
-  if (!parentId) redirect("/");
+  if (!parentId) {
+    redirect("/login?callbackUrl=%2Fplayers");
+  }
 
   const parentRows = (await sql`
     SELECT email, phone, name, is_admin
@@ -232,8 +200,6 @@ export default async function PlayersPage() {
       gs.created_at
     ORDER BY gs.session_date ASC, gs.created_at ASC
   `) as unknown as GroupSessionRow[];
-  const playerForSignup = players[0] ?? null;
-
   const upcomingSignups = (await sql`
     SELECT
       ps.group_session_id::text AS group_session_id,
@@ -245,6 +211,7 @@ export default async function PlayersPage() {
     FROM player_signups ps
     JOIN group_sessions gs ON gs.id = ps.group_session_id
     WHERE COALESCE(gs.session_date_end, gs.session_date) >= NOW()
+      AND ps.has_paid = true
   `) as unknown as UpcomingSignupRow[];
 
   const playerFullNames = new Set(
@@ -252,11 +219,13 @@ export default async function PlayersPage() {
   );
   const playerFirstLast = new Set(
     players
-      .map((player) => {
+      .flatMap((player) => {
         const split = splitPlayerName(player.name);
-        return `${normalizeText(split.firstName)}|${normalizeText(
-          split.lastName
-        )}`;
+        const first = normalizeText(split.firstName);
+        const last = normalizeText(split.lastName);
+        const values = [`${first}|${last}`];
+        if (!last) values.push(`${first}|player`);
+        return values;
       })
       .filter((value) => value !== "|")
   );
@@ -300,51 +269,13 @@ export default async function PlayersPage() {
     <div className="min-h-screen bg-emerald-50">
       <div className="pointer-events-none absolute inset-0 bg-linear-to-b from-emerald-50 via-white to-white" />
 
-      <header className="relative bg-linear-to-r from-emerald-600 to-emerald-700">
-        <div className="mx-auto max-w-6xl px-6 py-10">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <Image
-                src="/icon.png"
-                alt="David’s Soccer Training icon"
-                width={56}
-                height={56}
-                className="h-14 w-14 rounded-2xl bg-white p-2"
-                priority
-              />
-              <div>
-                <div className="text-sm font-semibold text-emerald-50">
-                  David’s Soccer Training
-                </div>
-                <h1 className="mt-1 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-                  Your players
-                </h1>
-                <p className="mt-2 text-sm text-emerald-100 sm:text-base">
-                  Tap a player to view and edit details.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="hidden rounded-full border border-emerald-200/30 bg-white/10 px-4 py-2 text-sm text-emerald-50 sm:block">
-                Parent portal
-              </div>
-              {parent.is_admin && (
-                <Link
-                  href="/admin"
-                  className="rounded-xl border border-emerald-200/40 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15"
-                >
-                  View admin
-                </Link>
-              )}
-              <ParentAccountSettings
-                initialEmail={parent.email}
-                initialPhone={parent.phone}
-              />
-              <SignOutButton />
-            </div>
-          </div>
-        </div>
-      </header>
+      <ParentPortalHeader
+        title="Your players"
+        subtitle="Tap a player to view and edit details."
+        isAdmin={parent.is_admin}
+        email={parent.email}
+        phone={parent.phone}
+      />
 
       <main className="relative mx-auto max-w-6xl px-6 py-12">
         <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -458,13 +389,7 @@ export default async function PlayersPage() {
                 return (
                   <Link
                     key={groupSession.id}
-                    href={buildGroupSessionUrl(
-                      groupSession.id,
-                      parent,
-                      playerForSignup
-                    )}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href={buildGroupSessionUrl(groupSession.id)}
                     className="group block overflow-hidden rounded-3xl border border-emerald-300 bg-emerald-500 shadow-sm transition hover:border-emerald-400 hover:shadow-md"
                   >
                   {groupSession.image_url ? (
@@ -530,7 +455,8 @@ export default async function PlayersPage() {
 
                     {alreadySignedUp ? (
                       <p className="mt-4 rounded-lg bg-emerald-700/30 px-3 py-2 text-sm font-semibold text-white">
-                        Already signed up for this session
+                        Already signed up for this session. Email davidfalesct@gmail.com to
+                        cancel/reschedule.
                       </p>
                     ) : null}
 

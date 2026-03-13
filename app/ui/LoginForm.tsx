@@ -4,10 +4,15 @@ import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 
-export function LoginForm() {
+type Props = {
+  callbackUrl?: string;
+};
+
+export function LoginForm({ callbackUrl = "/players" }: Props) {
   const [isPending, startTransition] = useTransition();
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
+  const callback = searchParams.get("callbackUrl") || callbackUrl;
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -28,7 +33,7 @@ export function LoginForm() {
           await signIn("parent-credentials", {
             identifier: ident,
             password,
-            callbackUrl: "/players",
+            callbackUrl: callback,
           });
         });
       }}
