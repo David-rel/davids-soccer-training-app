@@ -7,6 +7,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ageGroupFromAge, calculateAgeFromBirthdate } from "@/lib/playerAge";
 import { ParentPortalHeader } from "@/app/ui/ParentPortalHeader";
+import { PlayersOnboardingModal } from "@/app/players/ui/PlayersOnboardingModal";
 
 type PlayerRow = {
   id: string;
@@ -17,6 +18,8 @@ type PlayerRow = {
   primary_position: string | null;
   secondary_position: string | null;
   dominant_foot: string | null;
+  shirt_size: string | null;
+  location: string | null;
   profile_photo_url: string | null;
   strengths: string | null;
   focus_areas: string | null;
@@ -159,6 +162,8 @@ export default async function PlayersPage() {
       primary_position,
       secondary_position,
       dominant_foot,
+      shirt_size,
+      location,
       profile_photo_url,
       strengths,
       focus_areas,
@@ -278,6 +283,19 @@ export default async function PlayersPage() {
       />
 
       <main className="relative mx-auto max-w-6xl px-6 py-12">
+        <PlayersOnboardingModal
+          parent={{ email: parent.email, phone: parent.phone }}
+          players={players.map((player) => ({
+            id: player.id,
+            name: player.name,
+            birthdate: player.birthdate,
+            team_level: player.team_level,
+            dominant_foot: player.dominant_foot,
+            location: player.location,
+            shirt_size: player.shirt_size,
+          }))}
+        />
+
         <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">
