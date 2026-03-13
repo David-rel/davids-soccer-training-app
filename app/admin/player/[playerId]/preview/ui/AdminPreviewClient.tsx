@@ -15,6 +15,8 @@ type Player = {
   primary_position: string | null;
   secondary_position: string | null;
   dominant_foot: string | null;
+  shirt_size: string | null;
+  location: string | null;
   profile_photo_url: string | null;
   strengths: string | null;
   focus_areas: string | null;
@@ -141,7 +143,7 @@ export default function AdminPreviewClient(props: {
               />
               <div>
                 <div className="text-sm font-semibold text-emerald-50">
-                  David's Soccer Training
+                  David&apos;s Soccer Training
                 </div>
                 <h1 className="mt-1 text-2xl font-semibold text-white sm:text-3xl">
                   {player.name}
@@ -240,6 +242,29 @@ export default function AdminPreviewClient(props: {
                       </div>
                       <div className="mt-1 text-sm text-gray-900">
                         {player.dominant_foot}
+                      </div>
+                    </div>
+                  )}
+                  {player.shirt_size && (
+                    <div>
+                      <div className="text-xs font-semibold text-gray-500">
+                        Shirt Size
+                      </div>
+                      <div className="mt-1 text-sm text-gray-900">
+                        {player.shirt_size}
+                      </div>
+                    </div>
+                  )}
+                  {player.location && (
+                    <div>
+                      <div className="text-xs font-semibold text-gray-500">
+                        Location
+                      </div>
+                      <div className="mt-1 text-sm text-gray-900">
+                        {player.location}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        General area only, for travel planning.
                       </div>
                     </div>
                   )}

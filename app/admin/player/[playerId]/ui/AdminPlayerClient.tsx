@@ -19,6 +19,8 @@ type Player = {
   primary_position: string | null;
   secondary_position: string | null;
   dominant_foot: string | null;
+  shirt_size: string | null;
+  location: string | null;
   profile_photo_url: string | null;
   strengths: string | null;
   focus_areas: string | null;
@@ -1550,12 +1552,34 @@ export default function AdminPlayerClient(props: {
                   }
                 />
                 <Field
+                  label="Shirt size"
+                  value={draft.shirt_size ?? ""}
+                  onChange={(v) =>
+                    setDraft({ ...draft, shirt_size: v || null })
+                  }
+                  placeholder="e.g. Youth M"
+                />
+                <Field
                   label="Profile photo URL"
                   value={draft.profile_photo_url ?? ""}
                   onChange={(v) =>
                     setDraft({ ...draft, profile_photo_url: v || null })
                   }
                 />
+                <div className="sm:col-span-2">
+                  <TextArea
+                    label="Location"
+                    value={draft.location ?? ""}
+                    onChange={(v) =>
+                      setDraft({ ...draft, location: v || null })
+                    }
+                    placeholder="City, area, or general side of town"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Doesn&apos;t have to be exact. Just enough for the coach to
+                    understand travel distance.
+                  </p>
+                </div>
               </div>
 
               <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-4">
@@ -2865,6 +2889,8 @@ export default function AdminPlayerClient(props: {
                               primary_position: draft.primary_position,
                               secondary_position: draft.secondary_position,
                               dominant_foot: draft.dominant_foot,
+                              shirt_size: draft.shirt_size,
+                              location: draft.location,
                               profile_photo_url: draft.profile_photo_url,
                               strengths: draft.strengths,
                               focus_areas: draft.focus_areas,

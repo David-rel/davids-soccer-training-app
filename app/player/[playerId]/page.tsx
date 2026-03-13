@@ -21,6 +21,8 @@ type PlayerRow = {
   primary_position: string | null;
   secondary_position: string | null;
   dominant_foot: string | null;
+  shirt_size: string | null;
+  location: string | null;
   profile_photo_url: string | null;
   strengths: string | null;
   focus_areas: string | null;
@@ -60,6 +62,8 @@ export default async function PlayerPage(props: {
       primary_position,
       secondary_position,
       dominant_foot,
+      shirt_size,
+      location,
       profile_photo_url,
       strengths,
       focus_areas,

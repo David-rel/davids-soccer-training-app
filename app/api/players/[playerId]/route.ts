@@ -14,6 +14,8 @@ type PlayerRow = {
   primary_position: string | null;
   secondary_position: string | null;
   dominant_foot: string | null;
+  shirt_size: string | null;
+  location: string | null;
   profile_photo_url: string | null;
   strengths: string | null;
   focus_areas: string | null;
@@ -21,6 +23,13 @@ type PlayerRow = {
   created_at: string;
   updated_at: string;
 };
+
+function parseOptionalText(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const trimmed = String(value).trim();
+  return trimmed || null;
+}
 
 export async function PATCH(
   req: NextRequest,
@@ -39,6 +48,8 @@ export async function PATCH(
     primary_position: string | null;
     secondary_position: string | null;
     dominant_foot: string | null;
+    shirt_size: string | null;
+    location: string | null;
     profile_photo_url: string | null;
   }> | null;
 
@@ -58,6 +69,8 @@ export async function PATCH(
     birthdate && /^\d{4}-\d{2}-\d{2}$/.test(birthdate)
       ? Number(birthdate.slice(0, 4))
       : null;
+  const shirtSize = parseOptionalText(body?.shirt_size);
+  const location = parseOptionalText(body?.location);
 
   const rows = (await sql`
     UPDATE players
@@ -73,6 +86,16 @@ export async function PATCH(
         body?.secondary_position ?? null
       }, secondary_position),
       dominant_foot = COALESCE(${body?.dominant_foot ?? null}, dominant_foot),
+      shirt_size = CASE
+        WHEN ${body?.shirt_size !== undefined}
+        THEN ${shirtSize}::text
+        ELSE shirt_size
+      END,
+      location = CASE
+        WHEN ${body?.location !== undefined}
+        THEN ${location}::text
+        ELSE location
+      END,
       profile_photo_url = COALESCE(${
         body?.profile_photo_url ?? null
       }, profile_photo_url)
@@ -88,6 +111,8 @@ export async function PATCH(
       primary_position,
       secondary_position,
       dominant_foot,
+      shirt_size,
+      location,
       profile_photo_url,
       strengths,
       focus_areas,

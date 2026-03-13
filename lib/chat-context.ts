@@ -10,6 +10,8 @@ export type PlayerContextData = {
     primaryPosition: string | null;
     secondaryPosition: string | null;
     dominantFoot: string | null;
+    shirtSize: string | null;
+    location: string | null;
     strengths: string | null;
     focusAreas: string | null;
     developmentNotes: string | null;
@@ -44,6 +46,7 @@ export async function preparePlayerContext(
     SELECT
       id, name, birthdate::text as birthdate, team_level,
       primary_position, secondary_position, dominant_foot,
+      shirt_size, location,
       strengths, focus_areas, long_term_development_notes
     FROM players
     WHERE id = ${playerId}
@@ -103,6 +106,8 @@ export async function preparePlayerContext(
       primaryPosition: player.primary_position,
       secondaryPosition: player.secondary_position,
       dominantFoot: player.dominant_foot,
+      shirtSize: player.shirt_size,
+      location: player.location,
       strengths: player.strengths,
       focusAreas: player.focus_areas,
       developmentNotes: player.long_term_development_notes,
@@ -140,6 +145,8 @@ PLAYER PROFILE:
 - Team Level: ${contextData.player.teamLevel || "Not specified"}
 - Primary Position: ${contextData.player.primaryPosition || "Not specified"}
 - Dominant Foot: ${contextData.player.dominantFoot || "Not specified"}
+- Shirt Size: ${contextData.player.shirtSize || "Not specified"}
+- Location: ${contextData.player.location || "Not specified"}
 
 STRENGTHS: ${contextData.player.strengths || "Not yet documented"}
 

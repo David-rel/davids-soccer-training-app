@@ -1,0 +1,3 @@
+ALTER TABLE players
+  ADD COLUMN IF NOT EXISTS shirt_size TEXT,
+  ADD COLUMN IF NOT EXISTS location TEXT;

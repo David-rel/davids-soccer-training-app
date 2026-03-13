@@ -15,6 +15,8 @@ type Player = {
   primary_position: string | null;
   secondary_position: string | null;
   dominant_foot: string | null;
+  shirt_size: string | null;
+  location: string | null;
   profile_photo_url: string | null;
 };
 
@@ -25,6 +27,7 @@ function Field({
   placeholder,
   type = "text",
   disabled = false,
+  helperText,
 }: {
   label: string;
   value: string;
@@ -32,6 +35,7 @@ function Field({
   placeholder?: string;
   type?: string;
   disabled?: boolean;
+  helperText?: string;
 }) {
   return (
     <div className="space-y-1.5">
@@ -44,6 +48,35 @@ function Field({
         disabled={disabled}
         className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 placeholder:text-gray-500 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
       />
+      {helperText ? <p className="text-xs text-gray-500">{helperText}</p> : null}
+    </div>
+  );
+}
+
+function TextArea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  helperText,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  helperText?: string;
+}) {
+  return (
+    <div className="space-y-1.5 sm:col-span-2">
+      <label className="text-sm font-medium text-gray-700">{label}</label>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={3}
+        className="w-full resize-y rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 placeholder:text-gray-500 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+      />
+      {helperText ? <p className="text-xs text-gray-500">{helperText}</p> : null}
     </div>
   );
 }
@@ -67,6 +100,8 @@ export function PlayerEditor(props: { player: Player }) {
       a.primary_position !== b.primary_position ||
       a.secondary_position !== b.secondary_position ||
       a.dominant_foot !== b.dominant_foot ||
+      a.shirt_size !== b.shirt_size ||
+      a.location !== b.location ||
       a.profile_photo_url !== b.profile_photo_url
     );
   }, [draft, props.player]);
@@ -261,6 +296,27 @@ export function PlayerEditor(props: { player: Player }) {
           }}
           placeholder="Right / Left / Both"
         />
+        <Field
+          label="Shirt size"
+          value={draft.shirt_size ?? ""}
+          onChange={(v) => {
+            setSuccess(null);
+            setError(null);
+            setDraft((p) => ({ ...p, shirt_size: v || null }));
+          }}
+          placeholder="e.g. Youth M"
+        />
+        <TextArea
+          label="Location"
+          value={draft.location ?? ""}
+          onChange={(v) => {
+            setSuccess(null);
+            setError(null);
+            setDraft((p) => ({ ...p, location: v || null }));
+          }}
+          placeholder="City, area, or general side of town"
+          helperText="Doesn’t have to be exact. Just enough to help the coach understand travel distance."
+        />
       </div>
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
@@ -301,6 +357,8 @@ export function PlayerEditor(props: { player: Player }) {
                     primary_position: draft.primary_position,
                     secondary_position: draft.secondary_position,
                     dominant_foot: draft.dominant_foot,
+                    shirt_size: draft.shirt_size,
+                    location: draft.location,
                     profile_photo_url: draft.profile_photo_url,
                   }),
                 });
