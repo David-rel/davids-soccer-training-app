@@ -224,22 +224,35 @@ export async function POST(request: NextRequest) {
       { timeZone: "America/Phoenix", year: "numeric", month: "long", day: "numeric" }
     );
     const smsBody = `Waiver signed: ${parentName} signed the 1-on-1 private training contract for ${playerName} on ${signedDateLabel}.`;
-    let smsSent = false;
-    let smsError: string | null = null;
     try {
       await sendSmsViaTwilio(smsBody, { to: signedDocumentAlertPhone });
-      smsSent = true;
     } catch (error) {
-      smsError = error instanceof Error ? error.message : "Unknown SMS error";
       console.error("Failed to send signed-document SMS alert", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown SMS error";
+
+      // Keep data consistent with the "all steps must finish before success" requirement.
+      try {
+        await sql`DELETE FROM signed_documents WHERE id = ${inserted.id}`;
+      } catch (deleteError) {
+        console.error(
+          "Failed to rollback signed document after SMS failure",
+          deleteError
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error: `Could not send confirmation text message: ${errorMessage}`,
+        },
+        { status: 502 }
+      );
     }
 
     return NextResponse.json(
       {
         id: inserted.id,
         createdAt: inserted.created_at,
-        smsSent,
-        smsError,
       },
       { status: 201 }
     );
