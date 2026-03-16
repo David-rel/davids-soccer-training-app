@@ -40,7 +40,10 @@ export default function WaiverSigningForm({
   const [agreementAccepted, setAgreementAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const [successModal, setSuccessModal] = useState<{
+    id: string | null;
+    signedDocumentUrl: string | null;
+  } | null>(null);
 
   const selectedPlayer = useMemo(
     () => playerOptions.find((player) => player.id === selectedPlayerId) || null,
@@ -52,6 +55,18 @@ export default function WaiverSigningForm({
     setPlayerName(selectedPlayer.name);
     setPlayerBirthdate(selectedPlayer.birthdate || "");
   }, [selectedPlayer]);
+
+  const resetForm = () => {
+    setSelectedPlayerId("");
+    setPlayerName("");
+    setPlayerBirthdate("");
+    setParentGuardianName(defaultParentName);
+    setPhoneNumber(defaultPhone);
+    setEmergencyContact(defaultParentName);
+    setTypedSignatureName("");
+    setSignatureDate(todayIsoDate());
+    setAgreementAccepted(false);
+  };
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -83,7 +98,7 @@ export default function WaiverSigningForm({
     }
 
     setError("");
-    setSuccessMessage("");
+    setSuccessModal(null);
     setIsSubmitting(true);
 
     try {
@@ -104,7 +119,7 @@ export default function WaiverSigningForm({
       });
 
       const payload = (await response.json().catch(() => null)) as
-        | { error?: string; id?: string }
+        | { error?: string; id?: string; signedDocumentUrl?: string }
         | null;
 
       if (!response.ok) {
@@ -112,9 +127,11 @@ export default function WaiverSigningForm({
         return;
       }
 
-      setSuccessMessage(
-        `Waiver signed and saved successfully${payload?.id ? ` (ID: ${payload.id})` : ""}.`
-      );
+      resetForm();
+      setSuccessModal({
+        id: payload?.id ?? null,
+        signedDocumentUrl: payload?.signedDocumentUrl ?? null,
+      });
     } catch {
       setError("Could not save signed waiver.");
     } finally {
@@ -123,10 +140,11 @@ export default function WaiverSigningForm({
   };
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm md:p-8"
-    >
+    <>
+      <form
+        onSubmit={onSubmit}
+        className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm md:p-8"
+      >
       <h2 className="text-3xl font-bold text-gray-900">
         1. Participant Information
       </h2>
@@ -302,9 +320,6 @@ export default function WaiverSigningForm({
       </label>
 
       {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
-      {successMessage ? (
-        <p className="mt-4 text-sm font-semibold text-emerald-700">{successMessage}</p>
-      ) : null}
 
       <div className="mt-6">
         <button
@@ -315,6 +330,40 @@ export default function WaiverSigningForm({
           {isSubmitting ? "Saving signature..." : "Sign and Save Agreement"}
         </button>
       </div>
-    </form>
+      </form>
+
+      {successModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-gray-900">Waiver Signed</h3>
+            <p className="mt-2 text-sm text-gray-700">
+              Submission is complete and your signed waiver document has been generated.
+            </p>
+            {successModal.id ? (
+              <p className="mt-3 text-xs text-gray-500">Record ID: {successModal.id}</p>
+            ) : null}
+            {successModal.signedDocumentUrl ? (
+              <a
+                href={successModal.signedDocumentUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex text-sm font-semibold text-emerald-700 underline underline-offset-2"
+              >
+                View signed PDF
+              </a>
+            ) : null}
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={() => setSuccessModal(null)}
+                className="inline-flex rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

@@ -20,6 +20,11 @@ const sections = [
     description: "Add, edit, publish, and remove YouTube training videos.",
     href: "/admin/videos",
   },
+  {
+    title: "Waivers",
+    description: "Browse and search all signed private-training waivers.",
+    href: "/admin/waivers",
+  },
 ];
 
 export default function AdminPage() {

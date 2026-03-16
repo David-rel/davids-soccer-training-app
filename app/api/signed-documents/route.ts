@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { del, put } from "@vercel/blob";
 
 import { sql } from "@/db";
 import { authOptions } from "@/lib/auth";
@@ -9,6 +10,7 @@ import {
   PRIVATE_TRAINING_WAIVER_DOCUMENT,
 } from "@/lib/signedDocuments";
 import { sendSmsViaTwilio } from "@/lib/twilio";
+import { buildSignedWaiverPdf } from "@/lib/waiverPdf";
 
 type CreateSignedDocumentBody = {
   playerId?: string | null;
@@ -57,6 +59,14 @@ function getForwardedIp(request: NextRequest) {
   const [firstIp] = forwardedFor.split(",");
   const cleaned = (firstIp || "").trim();
   return cleaned || null;
+}
+
+function toFileToken(value: string) {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || "player";
 }
 
 export async function POST(request: NextRequest) {
@@ -175,6 +185,38 @@ export async function POST(request: NextRequest) {
     const userAgent = cleanNullable(request.headers.get("user-agent"));
     const ipAddress = getForwardedIp(request);
 
+    let signedBlobUrl = "";
+    let signedBlobKey = "";
+    try {
+      const signedPdfBytes = await buildSignedWaiverPdf({
+        playerName,
+        playerBirthdate,
+        parentGuardianName: parentName,
+        phoneNumber,
+        emergencyContact,
+        typedSignatureName,
+        signatureDate,
+      });
+
+      const playerToken = toFileToken(playerName);
+      signedBlobKey = `waivers/${signatureDate}-${playerToken}-${crypto.randomUUID()}.pdf`;
+      const signedBlob = await put(signedBlobKey, Buffer.from(signedPdfBytes), {
+        access: "public",
+        contentType: "application/pdf",
+      });
+      signedBlobUrl = signedBlob.url;
+    } catch (error) {
+      console.error("Failed to generate or upload signed waiver PDF", error);
+      const message =
+        error instanceof Error ? error.message : "Unknown PDF generation error";
+      return NextResponse.json(
+        {
+          error: `Could not generate signed waiver document: ${message}`,
+        },
+        { status: 502 }
+      );
+    }
+
     const insertedRows = (await sql`
       INSERT INTO signed_documents (
         document_key,
@@ -190,7 +232,9 @@ export async function POST(request: NextRequest) {
         typed_signature_name,
         signature_date,
         ip_address,
-        user_agent
+        user_agent,
+        signed_document_url,
+        signed_blob_key
       )
       VALUES (
         ${PRIVATE_TRAINING_WAIVER_DOCUMENT.key},
@@ -206,26 +250,45 @@ export async function POST(request: NextRequest) {
         ${typedSignatureName},
         ${signatureDate}::date,
         ${ipAddress},
-        ${userAgent}
+        ${userAgent},
+        ${signedBlobUrl},
+        ${signedBlobKey}
       )
       RETURNING id, created_at::text AS created_at
     `) as unknown as Array<{ id: string; created_at: string }>;
 
     const inserted = insertedRows[0];
     if (!inserted) {
+      try {
+        await del(signedBlobUrl);
+      } catch (deleteError) {
+        console.error(
+          "Failed to delete uploaded waiver blob after insert failure",
+          deleteError
+        );
+      }
       return NextResponse.json({ error: "Could not save signed document." }, { status: 500 });
     }
 
     const signedDocumentAlertPhone =
       String(process.env.SIGNED_DOCUMENT_ALERT_TO_PHONE ?? "").trim() ||
-      "7206122980";
+      String(process.env.BIRTHDAY_ALERT_TO_PHONE ?? "").trim() ||
+      "7206122979";
     const signedDateLabel = new Date(`${signatureDate}T12:00:00.000Z`).toLocaleDateString(
       "en-US",
       { timeZone: "America/Phoenix", year: "numeric", month: "long", day: "numeric" }
     );
     const smsBody = `Waiver signed: ${parentName} signed the 1-on-1 private training contract for ${playerName} on ${signedDateLabel}.`;
     try {
-      await sendSmsViaTwilio(smsBody, { to: signedDocumentAlertPhone });
+      console.info(
+        `[signed-documents] Sending SMS for ${inserted.id} to ${signedDocumentAlertPhone}`
+      );
+      const smsResult = await sendSmsViaTwilio(smsBody, {
+        to: signedDocumentAlertPhone,
+      });
+      console.info(
+        `[signed-documents] SMS sent for ${inserted.id}: sid=${smsResult.sid} status=${smsResult.status ?? "unknown"}`
+      );
     } catch (error) {
       console.error("Failed to send signed-document SMS alert", error);
       const errorMessage =
@@ -238,6 +301,14 @@ export async function POST(request: NextRequest) {
         console.error(
           "Failed to rollback signed document after SMS failure",
           deleteError
+        );
+      }
+      try {
+        await del(signedBlobUrl);
+      } catch (blobDeleteError) {
+        console.error(
+          "Failed to delete uploaded waiver blob after SMS failure",
+          blobDeleteError
         );
       }
 
@@ -253,6 +324,7 @@ export async function POST(request: NextRequest) {
       {
         id: inserted.id,
         createdAt: inserted.created_at,
+        signedDocumentUrl: signedBlobUrl,
       },
       { status: 201 }
     );
