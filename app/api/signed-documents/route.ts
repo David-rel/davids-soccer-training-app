@@ -224,15 +224,22 @@ export async function POST(request: NextRequest) {
       { timeZone: "America/Phoenix", year: "numeric", month: "long", day: "numeric" }
     );
     const smsBody = `Waiver signed: ${parentName} signed the 1-on-1 private training contract for ${playerName} on ${signedDateLabel}.`;
-
-    void sendSmsViaTwilio(smsBody, { to: signedDocumentAlertPhone }).catch((smsError) => {
-      console.error("Failed to send signed-document SMS alert", smsError);
-    });
+    let smsSent = false;
+    let smsError: string | null = null;
+    try {
+      await sendSmsViaTwilio(smsBody, { to: signedDocumentAlertPhone });
+      smsSent = true;
+    } catch (error) {
+      smsError = error instanceof Error ? error.message : "Unknown SMS error";
+      console.error("Failed to send signed-document SMS alert", error);
+    }
 
     return NextResponse.json(
       {
         id: inserted.id,
         createdAt: inserted.created_at,
+        smsSent,
+        smsError,
       },
       { status: 201 }
     );
