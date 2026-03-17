@@ -347,8 +347,8 @@ export default async function PlayersPage() {
                             Shirt: {pointsState.shirtLevel}
                           </span>
                         ) : null}
-                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                          Title: {pointsState?.titleLevel ?? "Igniter"}
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                          {pointsState?.titleLevel ?? "Igniter"}
                         </span>
                       </div>
                     </div>
