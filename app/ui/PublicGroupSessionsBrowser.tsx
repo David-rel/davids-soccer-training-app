@@ -2,6 +2,11 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import {
+  formatUsdPrice,
+  GROUP_SESSION_PRIVATE_SIGNUP_PRICE,
+  GROUP_SESSION_STANDARD_SIGNUP_PRICE,
+} from "@/lib/groupSessionPricing";
 
 type SessionCard = {
   id: number;
@@ -46,15 +51,6 @@ function formatSessionTimeRange(startInput: string, endInput: string | null) {
     timeZone: GROUP_TIME_ZONE,
   });
   return `${format.format(start)} - ${format.format(end)}`;
-}
-
-function formatPrice(input: number | null) {
-  if (!input || Number.isNaN(Number(input))) return "TBD";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(Number(input));
 }
 
 export function PublicGroupSessionsBrowser({ sessions }: Props) {
@@ -152,7 +148,19 @@ export function PublicGroupSessionsBrowser({ sessions }: Props) {
                 <p className="mt-2 text-sm text-gray-700">
                   Location: {session.location || "TBD"}
                 </p>
-                <p className="text-sm text-gray-700">Price: {formatPrice(session.price)}</p>
+                <p className="text-sm text-gray-700">
+                  Standard: {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)} per
+                  signup
+                </p>
+                <p className="text-sm text-emerald-700">
+                  Private package:{" "}
+                  <span className="line-through text-gray-500">
+                    {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
+                  </span>{" "}
+                  <span className="font-semibold">
+                    {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
+                  </span>
+                </p>
                 <p className="text-sm text-gray-700">
                   {session.spots_left} {session.spots_left === 1 ? "spot" : "spots"} left
                 </p>

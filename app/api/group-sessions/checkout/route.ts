@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import type Stripe from "stripe";
 
 import { authOptions } from "@/lib/auth";
 import { sql } from "@/db";
@@ -10,6 +11,7 @@ import {
   updatePlayerSignupsCheckout,
 } from "@/lib/groupSessions";
 import { sendNewParentSignupEmail } from "@/lib/email";
+import { getGroupSessionSignupPrice } from "@/lib/groupSessionPricing";
 import { normalizePhoneForStorage } from "@/lib/phone";
 import { getStripe } from "@/lib/stripe";
 
@@ -52,6 +54,7 @@ type PlayerRow = {
   team_level: string | null;
   focus_areas: string | null;
   long_term_development_notes: string | null;
+  in_privates: boolean;
 };
 
 type PaidSignupRow = {
@@ -71,6 +74,7 @@ type CheckoutPlayer = {
   dominantFoot: string | null;
   teamLevel: string | null;
   notes: string | null;
+  inPrivates: boolean;
 };
 
 function cleanText(input: unknown) {
@@ -207,14 +211,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const price = Number(session.price || 0);
-    if (!Number.isFinite(price) || price <= 0) {
-      return NextResponse.json(
-        { error: "Session price is not configured" },
-        { status: 400 }
-      );
-    }
-
     let emergencyContact = "";
     let contactPhone = "";
     let contactEmail = "";
@@ -278,7 +274,8 @@ export async function POST(request: NextRequest) {
           dominant_foot,
           team_level,
           focus_areas,
-          long_term_development_notes
+          long_term_development_notes,
+          in_privates
         FROM players
         WHERE parent_id = ${signedInParentId}
         ORDER BY created_at ASC
@@ -329,6 +326,7 @@ export async function POST(request: NextRequest) {
           notes: cleanNullable(
             player.focus_areas || player.long_term_development_notes || ""
           ),
+          inPrivates: player.in_privates,
         };
       });
 
@@ -444,6 +442,7 @@ export async function POST(request: NextRequest) {
           dominantFoot: cleanNullable(player.preferredFoot),
           teamLevel: cleanNullable(player.team),
           notes: cleanNullable(player.notes),
+          inPrivates: false,
         };
       });
 
@@ -626,35 +625,59 @@ export async function POST(request: NextRequest) {
       process.env.NEXT_PUBLIC_SITE_URL ||
       request.headers.get("origin") ||
       "http://localhost:3000";
+    const standardPlayerCount = selectedPlayers.filter(
+      (player) => !player.inPrivates
+    ).length;
+    const privatePlayerCount = selectedPlayers.length - standardPlayerCount;
+    const sessionDescription = `${new Date(session.session_date).toLocaleString("en-US", {
+      dateStyle: "full",
+      timeStyle: "short",
+      timeZone: GROUP_TIME_ZONE,
+    })} (${formatTimeRange(session.session_date, session.session_date_end)})${
+      session.location ? ` • ${session.location}` : ""
+    }`;
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+
+    if (standardPlayerCount > 0) {
+      lineItems.push({
+        quantity: standardPlayerCount,
+        price_data: {
+          currency: "usd",
+          unit_amount: Math.round(getGroupSessionSignupPrice(false) * 100),
+          product_data: {
+            name: `${session.title} (Standard Signup)`,
+            description: sessionDescription,
+          },
+        },
+      });
+    }
+
+    if (privatePlayerCount > 0) {
+      lineItems.push({
+        quantity: privatePlayerCount,
+        price_data: {
+          currency: "usd",
+          unit_amount: Math.round(getGroupSessionSignupPrice(true) * 100),
+          product_data: {
+            name: `${session.title} (Private Package Discount)`,
+            description: sessionDescription,
+          },
+        },
+      });
+    }
 
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "payment",
       success_url: `${siteUrl}/group-sessions/${session.id}?checkout=success`,
       cancel_url: `${siteUrl}/group-sessions/${session.id}?checkout=cancelled`,
       customer_email: contactEmail,
-      line_items: [
-        {
-          quantity: selectedPlayers.length,
-          price_data: {
-            currency: "usd",
-            unit_amount: Math.round(price * 100),
-            product_data: {
-              name: session.title,
-              description: `${new Date(session.session_date).toLocaleString("en-US", {
-                dateStyle: "full",
-                timeStyle: "short",
-                timeZone: GROUP_TIME_ZONE,
-              })} (${formatTimeRange(session.session_date, session.session_date_end)})${
-                session.location ? ` • ${session.location}` : ""
-              }`,
-            },
-          },
-        },
-      ],
+      line_items: lineItems,
       metadata: {
         group_session_id: String(session.id),
         player_signup_ids: signupIds.join(","),
         player_count: String(selectedPlayers.length),
+        standard_player_count: String(standardPlayerCount),
+        private_player_count: String(privatePlayerCount),
         parent_portal_email: parentPortalEmail,
         parent_portal_password: generatedPassword || "",
         parent_portal_is_new: parentWasCreated ? "true" : "false",
