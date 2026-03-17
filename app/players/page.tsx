@@ -187,7 +187,9 @@ export default async function PlayersPage() {
       gs.max_players,
       COUNT(ps.id)::int AS signup_count
     FROM group_sessions gs
-    LEFT JOIN player_signups ps ON ps.group_session_id = gs.id
+    LEFT JOIN player_signups ps
+      ON ps.group_session_id = gs.id
+      AND ps.has_paid = true
     WHERE COALESCE(gs.session_date_end, gs.session_date) >= NOW()
     GROUP BY
       gs.id,
