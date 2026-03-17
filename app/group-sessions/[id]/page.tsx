@@ -290,13 +290,15 @@ export default async function GroupSessionDetailPage({ params }: PageProps) {
                     `${formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)} per signup`
                   )}
                 </p>
-                <p className="text-sm text-emerald-700">
-                  Players in a private package pay{" "}
-                  <span className="font-semibold">
-                    {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
-                  </span>{" "}
-                  per signup.
-                </p>
+                {hasPrivatePackagePlayer ? (
+                  <p className="text-sm text-emerald-700">
+                    Players in a private package pay{" "}
+                    <span className="font-semibold">
+                      {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
+                    </span>{" "}
+                    per signup.
+                  </p>
+                ) : null}
                 <p>{formatSpotsRemaining(session.spots_left)}</p>
               </div>
 

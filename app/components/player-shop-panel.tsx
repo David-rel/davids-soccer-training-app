@@ -135,7 +135,7 @@ export default function PlayerShopPanel(props: Props) {
         {points ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric
-              label="Title"
+              label="Rank"
               value={formatTitleWithOptionalShirt({
                 titleLevel: points.titleLevel,
                 shirtLevel: points.shirtLevel,

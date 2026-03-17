@@ -299,19 +299,28 @@ export default function SessionCheckoutForm({
         <p>
           <span className="font-semibold">Signups:</span> {selectedCount}
         </p>
-        <p>
-          <span className="font-semibold">Price per player:</span>{" "}
-          {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)} standard •{" "}
-          {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)} private package
-        </p>
-        <p>
-          <span className="font-semibold">Selected at standard rate:</span>{" "}
-          {standardSelectedCount}
-        </p>
-        <p>
-          <span className="font-semibold">Selected at private rate:</span>{" "}
-          {privateSelectedCount}
-        </p>
+        {privateSelectedCount > 0 ? (
+          <>
+            <p>
+              <span className="font-semibold">Price per player:</span>{" "}
+              {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)} standard •{" "}
+              {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)} private package
+            </p>
+            <p>
+              <span className="font-semibold">Selected at standard rate:</span>{" "}
+              {standardSelectedCount}
+            </p>
+            <p>
+              <span className="font-semibold">Selected at private rate:</span>{" "}
+              {privateSelectedCount}
+            </p>
+          </>
+        ) : (
+          <p>
+            <span className="font-semibold">Price per player:</span>{" "}
+            {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
+          </p>
+        )}
         <p>
           <span className="font-semibold">Estimated total:</span>{" "}
           {formatUsdPrice(selectedTotal)}

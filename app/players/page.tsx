@@ -489,9 +489,11 @@ export default async function PlayersPage() {
                           `${formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)} per signup`
                         )}
                       </p>
-                      <p className="text-sm text-emerald-100">
-                        Private package players get the discounted signup rate.
-                      </p>
+                      {hasPrivatePackagePlayer ? (
+                        <p className="text-sm text-emerald-100">
+                          Private package players get the discounted signup rate.
+                        </p>
+                      ) : null}
                       <p className="text-white">
                         {groupSession.max_players > 0
                           ? `${Math.max(
