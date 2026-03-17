@@ -188,7 +188,7 @@ export default async function PlayerPage(props: {
                   Player Progression
                 </h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  Shirt/title progress and remaining non-session XP this week.
+                  Shirt/rank progress and remaining non-session XP this week.
                 </p>
               </div>
               <Link
@@ -201,7 +201,7 @@ export default async function PlayerPage(props: {
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3">
                 <p className="text-xs uppercase tracking-wide text-gray-600">
-                  Title
+                  Rank
                 </p>
                 <p className="mt-1 text-lg font-semibold text-gray-900">
                   {formatTitleWithOptionalShirt({
