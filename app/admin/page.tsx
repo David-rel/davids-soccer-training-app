@@ -25,6 +25,11 @@ const sections = [
     description: "Browse and search all signed private-training waivers.",
     href: "/admin/waivers",
   },
+  {
+    title: "Orders",
+    description: "Track all player shop purchases and SMS notification status.",
+    href: "/admin/orders",
+  },
 ];
 
 export default function AdminPage() {

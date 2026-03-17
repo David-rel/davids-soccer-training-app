@@ -13,6 +13,7 @@ import {
   GROUP_SESSION_PRIVATE_SIGNUP_PRICE,
   GROUP_SESSION_STANDARD_SIGNUP_PRICE,
 } from "@/lib/groupSessionPricing";
+import { getPointsStateForPlayer } from "@/lib/points/service";
 
 type PlayerRow = {
   id: string;
@@ -171,6 +172,13 @@ export default async function PlayersPage() {
     WHERE parent_id = ${parentId}
     ORDER BY created_at DESC
   `) as unknown as PlayerRow[];
+  const playerPointsEntries = await Promise.all(
+    players.map(async (player) => {
+      const state = await getPointsStateForPlayer(player.id).catch(() => null);
+      return [player.id, state] as const;
+    })
+  );
+  const playerPointsById = new Map(playerPointsEntries);
   const hasPrivatePackagePlayer = players.some((player) => player.in_privates);
 
   const groupSessions = (await sql`
@@ -313,89 +321,101 @@ export default async function PlayersPage() {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {players.map((p) => (
-              <Link
-                key={p.id}
-                href={`/player/${p.id}`}
-                className="group rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm transition hover:border-emerald-300 hover:shadow-md"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="truncate text-base font-semibold text-gray-900">
-                      {p.name}
-                    </div>
-                    <div className="mt-1 text-sm text-gray-600">
-                      {p.team_level ?? "—"}
-                    </div>
-                  </div>
-                  <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                    Edit
-                  </div>
-                </div>
+            {players.map((p) => {
+              const pointsState = playerPointsById.get(p.id);
 
-                <div className="mt-4 grid gap-2 text-sm text-gray-600">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Positions</span>
-                    <span className="font-medium text-gray-800">
-                      {p.primary_position ?? "—"}
-                      {p.secondary_position ? ` / ${p.secondary_position}` : ""}
-                    </span>
+              return (
+                <Link
+                  key={p.id}
+                  href={`/player/${p.id}`}
+                  className="group rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm transition hover:border-emerald-300 hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="truncate text-base font-semibold text-gray-900">
+                        {p.name}
+                      </div>
+                      <div className="mt-1 text-sm text-gray-600">
+                        {p.team_level ?? "—"}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                          Shirt: {pointsState?.shirtLevel ?? "No Shirt"}
+                        </span>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                          Title: {pointsState?.titleLevel ?? "Igniter"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      Edit
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Age</span>
-                    <span className="font-medium text-gray-800">
-                      {calculateAgeFromBirthdate(p.birthdate) ?? "—"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Birth year</span>
-                    <span className="font-medium text-gray-800">
-                      {(p.birthdate
-                        ? Number(p.birthdate.slice(0, 4))
-                        : p.birth_year) ?? "—"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Age group</span>
-                    <span className="font-medium text-gray-800">
-                      {ageGroupFromAge(
-                        calculateAgeFromBirthdate(p.birthdate)
-                      ) ?? "—"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Foot</span>
-                    <span className="font-medium text-gray-800">
-                      {p.dominant_foot ?? "—"}
-                    </span>
-                  </div>
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-gray-500">Group signup</span>
-                    {p.in_privates ? (
-                      <span className="text-right">
-                        <span className="text-xs text-gray-500 line-through">
+
+                  <div className="mt-4 grid gap-2 text-sm text-gray-600">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Positions</span>
+                      <span className="font-medium text-gray-800">
+                        {p.primary_position ?? "—"}
+                        {p.secondary_position ? ` / ${p.secondary_position}` : ""}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Age</span>
+                      <span className="font-medium text-gray-800">
+                        {calculateAgeFromBirthdate(p.birthdate) ?? "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Birth year</span>
+                      <span className="font-medium text-gray-800">
+                        {(p.birthdate
+                          ? Number(p.birthdate.slice(0, 4))
+                          : p.birth_year) ?? "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Age group</span>
+                      <span className="font-medium text-gray-800">
+                        {ageGroupFromAge(
+                          calculateAgeFromBirthdate(p.birthdate)
+                        ) ?? "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Foot</span>
+                      <span className="font-medium text-gray-800">
+                        {p.dominant_foot ?? "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-gray-500">Group signup</span>
+                      {p.in_privates ? (
+                        <span className="text-right">
+                          <span className="text-xs text-gray-500 line-through">
+                            {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
+                          </span>
+                          <span className="block font-semibold text-emerald-700">
+                            {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
+                          </span>
+                          <span className="block text-xs text-emerald-700">
+                            Private package discount
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="font-medium text-gray-800">
                           {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
                         </span>
-                        <span className="block font-semibold text-emerald-700">
-                          {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
-                        </span>
-                        <span className="block text-xs text-emerald-700">
-                          Private package discount
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="font-medium text-gray-800">
-                        {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
-                      </span>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                <div className="mt-4 text-xs text-gray-500">
-                  Click to view full profile
-                </div>
-              </Link>
-            ))}
+                  <div className="mt-4 text-xs text-gray-500">
+                    Click to view full profile
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
 
