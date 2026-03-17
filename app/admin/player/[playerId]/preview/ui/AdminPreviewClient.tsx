@@ -2,10 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import PlayerContentTabs from "@/app/player/[playerId]/ui/PlayerContentTabs";
 import { PlayerFeedbackSection } from "@/app/player/[playerId]/ui/PlayerFeedbackSection";
 import { ChatWrapper } from "@/app/player/[playerId]/ui/ChatWrapper";
+import type { PointsStateView } from "@/lib/points/types";
+import { formatTitleWithOptionalShirt } from "@/lib/points/display";
 
 type Player = {
   id: string;
@@ -40,6 +42,7 @@ export default function AdminPreviewClient(props: {
 }) {
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
+  const [pointsState, setPointsState] = useState<PointsStateView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,12 +50,7 @@ export default function AdminPreviewClient(props: {
     props.params.then((p) => setPlayerId(p.playerId));
   }, [props.params]);
 
-  useEffect(() => {
-    if (!playerId) return;
-    void loadData();
-  }, [playerId]);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     if (!playerId) {
       setError("No player ID found");
       return;
@@ -60,10 +58,13 @@ export default function AdminPreviewClient(props: {
     
     setError(null);
     setLoading(true);
+    setPointsState(null);
 
     try {
-      // Fetch player data
-      const playerRes = await fetch(`/api/admin/players/${playerId}`);
+      const [playerRes, pointsRes] = await Promise.all([
+        fetch(`/api/admin/players/${playerId}`, { cache: "no-store" }),
+        fetch(`/api/admin/players/${playerId}/points/state`, { cache: "no-store" }),
+      ]);
 
       if (!playerRes.ok) {
         const text = await playerRes.text();
@@ -72,12 +73,22 @@ export default function AdminPreviewClient(props: {
 
       const playerData = await playerRes.json();
       setPlayer(playerData.player);
+
+      if (pointsRes.ok) {
+        const pointsPayload = (await pointsRes.json()) as PointsStateView;
+        setPointsState(pointsPayload);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load data");
     } finally {
       setLoading(false);
     }
-  }
+  }, [playerId]);
+
+  useEffect(() => {
+    if (!playerId) return;
+    void loadData();
+  }, [loadData, playerId]);
 
   if (loading) {
     return (
@@ -155,6 +166,12 @@ export default function AdminPreviewClient(props: {
             </div>
             <div className="flex gap-3">
               <Link
+                href={`/admin/player/${playerId}/preview/shop`}
+                className="rounded-xl border border-emerald-200/40 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/15"
+              >
+                Shop preview
+              </Link>
+              <Link
                 href={`/admin/player/${playerId}`}
                 className="rounded-xl border border-emerald-200/40 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/15"
               >
@@ -167,6 +184,45 @@ export default function AdminPreviewClient(props: {
 
       <main className="relative mx-auto max-w-6xl px-6 py-12">
         <div className="space-y-6">
+          <section className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Player Progression
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Read-only points snapshot for this player.
+                </p>
+              </div>
+              <Link
+                href={`/admin/player/${playerId}/preview/shop`}
+                className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+              >
+                Open shop preview
+              </Link>
+            </div>
+
+            {pointsState ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <PreviewMetric
+                  label="Title"
+                  value={formatTitleWithOptionalShirt({
+                    titleLevel: pointsState.titleLevel,
+                    shirtLevel: pointsState.shirtLevel,
+                  })}
+                />
+                <PreviewMetric label="XP" value={String(pointsState.trainingXp)} />
+                <PreviewMetric label="Credits" value={String(pointsState.credits)} />
+                <PreviewMetric
+                  label="Weekly Remaining"
+                  value={`${pointsState.weeklyNonSessionRemaining}/${pointsState.weeklyNonSessionCap}`}
+                />
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-gray-600">Progression unavailable.</p>
+            )}
+          </section>
+
           {/* Section 1: Profile + Coach Notes Combined */}
           <div className="rounded-3xl border border-emerald-200 bg-white p-8 shadow-sm">
             <div className="grid gap-8 lg:grid-cols-2">
@@ -394,6 +450,15 @@ export default function AdminPreviewClient(props: {
       </main>
 
       <ChatWrapper playerId={player.id} playerName={player.name} />
+    </div>
+  );
+}
+
+function PreviewMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3">
+      <p className="text-xs uppercase tracking-wide text-gray-600">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-gray-900">{value}</p>
     </div>
   );
 }

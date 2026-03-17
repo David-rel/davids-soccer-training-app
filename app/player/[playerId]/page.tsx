@@ -10,6 +10,9 @@ import { PlayerEditor } from "@/app/player/[playerId]/ui/PlayerEditor";
 import PlayerContentTabs from "@/app/player/[playerId]/ui/PlayerContentTabs";
 import { PlayerFeedbackSection } from "@/app/player/[playerId]/ui/PlayerFeedbackSection";
 import { ChatWrapper } from "@/app/player/[playerId]/ui/ChatWrapper";
+import { DEFAULT_POINTS_RULE_CONFIG } from "@/lib/points/constants";
+import { getPointsStateForPlayer } from "@/lib/points/service";
+import { formatTitleWithOptionalShirt } from "@/lib/points/display";
 
 type PlayerRow = {
   id: string;
@@ -90,6 +93,18 @@ export default async function PlayerPage(props: {
   const player = rows[0];
   if (!player) redirect("/players");
 
+  const pointsState = await getPointsStateForPlayer(player.id).catch(() => ({
+    playerId: player.id,
+    trainingXp: 0,
+    credits: 0,
+    shirtLevel: "No Shirt",
+    titleLevel: "Igniter",
+    weeklyNonSessionCap: DEFAULT_POINTS_RULE_CONFIG.weeklyNonSessionCap,
+    weeklyNonSessionUsed: 0,
+    weeklyNonSessionRemaining: DEFAULT_POINTS_RULE_CONFIG.weeklyNonSessionCap,
+    totalAwardedSessions: 0,
+  }));
+
   const skillRatings = [
     {
       label: "First Touch",
@@ -166,6 +181,63 @@ export default async function PlayerPage(props: {
 
       <main className="relative mx-auto max-w-6xl px-6 py-12">
         <div className="space-y-6">
+          <section className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Player Progression
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Shirt/title progress and remaining non-session XP this week.
+                </p>
+              </div>
+              <Link
+                href={`/player/${player.id}/shop`}
+                className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+              >
+                Open player shop
+              </Link>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3">
+                <p className="text-xs uppercase tracking-wide text-gray-600">
+                  Title
+                </p>
+                <p className="mt-1 text-lg font-semibold text-gray-900">
+                  {formatTitleWithOptionalShirt({
+                    titleLevel: pointsState.titleLevel,
+                    shirtLevel: pointsState.shirtLevel,
+                  })}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3">
+                <p className="text-xs uppercase tracking-wide text-gray-600">
+                  XP
+                </p>
+                <p className="mt-1 text-lg font-semibold text-gray-900">
+                  {pointsState.trainingXp}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3">
+                <p className="text-xs uppercase tracking-wide text-gray-600">
+                  Credits
+                </p>
+                <p className="mt-1 text-lg font-semibold text-gray-900">
+                  {pointsState.credits}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3">
+                <p className="text-xs uppercase tracking-wide text-gray-600">
+                  Weekly Remaining
+                </p>
+                <p className="mt-1 text-lg font-semibold text-gray-900">
+                  {pointsState.weeklyNonSessionRemaining}/
+                  {pointsState.weeklyNonSessionCap}
+                </p>
+              </div>
+            </div>
+          </section>
+
           {/* Section 1: Profile + Coach Notes Combined */}
           <div className="rounded-3xl border border-emerald-200 bg-white p-8 shadow-sm">
             <div className="grid gap-8 lg:grid-cols-2">
