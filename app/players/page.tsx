@@ -8,6 +8,11 @@ import Link from "next/link";
 import { ageGroupFromAge, calculateAgeFromBirthdate } from "@/lib/playerAge";
 import { ParentPortalHeader } from "@/app/ui/ParentPortalHeader";
 import { PlayersOnboardingModal } from "@/app/players/ui/PlayersOnboardingModal";
+import {
+  formatUsdPrice,
+  GROUP_SESSION_PRIVATE_SIGNUP_PRICE,
+  GROUP_SESSION_STANDARD_SIGNUP_PRICE,
+} from "@/lib/groupSessionPricing";
 
 type PlayerRow = {
   id: string;
@@ -24,6 +29,7 @@ type PlayerRow = {
   strengths: string | null;
   focus_areas: string | null;
   long_term_development_notes: string | null;
+  in_privates: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -89,16 +95,6 @@ function formatTime(value: string | null) {
     minute: "2-digit",
     timeZone: GROUP_TIME_ZONE,
   });
-}
-
-function formatPrice(value: string | null) {
-  if (!value) return "—";
-  const parsed = Number(value);
-  if (Number.isNaN(parsed)) return value;
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(parsed);
 }
 
 function formatTimeRange(start: string | null, end: string | null) {
@@ -168,12 +164,14 @@ export default async function PlayersPage() {
       strengths,
       focus_areas,
       long_term_development_notes,
+      in_privates,
       created_at,
       updated_at
     FROM players
     WHERE parent_id = ${parentId}
     ORDER BY created_at DESC
   `) as unknown as PlayerRow[];
+  const hasPrivatePackagePlayer = players.some((player) => player.in_privates);
 
   const groupSessions = (await sql`
     SELECT
@@ -371,6 +369,26 @@ export default async function PlayersPage() {
                       {p.dominant_foot ?? "—"}
                     </span>
                   </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-gray-500">Group signup</span>
+                    {p.in_privates ? (
+                      <span className="text-right">
+                        <span className="text-xs text-gray-500 line-through">
+                          {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
+                        </span>
+                        <span className="block font-semibold text-emerald-700">
+                          {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
+                        </span>
+                        <span className="block text-xs text-emerald-700">
+                          Private package discount
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="font-medium text-gray-800">
+                        {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-4 text-xs text-gray-500">
@@ -453,7 +471,21 @@ export default async function PlayersPage() {
                       </p>
                       <p>
                         <span className="font-semibold text-white">Price:</span>{" "}
-                        {formatPrice(groupSession.price)}
+                        {hasPrivatePackagePlayer ? (
+                          <span className="inline-flex items-center gap-2">
+                            <span className="text-emerald-100 line-through">
+                              {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
+                            </span>
+                            <span className="font-bold text-white">
+                              {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
+                            </span>
+                          </span>
+                        ) : (
+                          `${formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)} per signup`
+                        )}
+                      </p>
+                      <p className="text-sm text-emerald-100">
+                        Private package players get the discounted signup rate.
                       </p>
                       <p className="text-white">
                         {groupSession.max_players > 0

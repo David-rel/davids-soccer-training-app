@@ -7,6 +7,11 @@ import { PublicSiteHeader } from "@/app/ui/PublicSiteHeader";
 import { authOptions } from "@/lib/auth";
 import { sql } from "@/db";
 import { getGroupSessionById } from "@/lib/groupSessions";
+import {
+  formatUsdPrice,
+  GROUP_SESSION_PRIVATE_SIGNUP_PRICE,
+  GROUP_SESSION_STANDARD_SIGNUP_PRICE,
+} from "@/lib/groupSessionPricing";
 
 import CheckoutStatusModal from "./CheckoutStatusModal";
 import GuestSessionSignupForm from "./GuestSessionSignupForm";
@@ -35,6 +40,7 @@ type PlayerRow = {
   team_level: string | null;
   focus_areas: string | null;
   long_term_development_notes: string | null;
+  in_privates: boolean;
 };
 
 type PaidSignupRow = {
@@ -70,15 +76,6 @@ function formatSessionTimeRange(startInput: string, endInput: string | null) {
     timeZone: GROUP_TIME_ZONE,
   });
   return `${format.format(start)} - ${format.format(end)}`;
-}
-
-function formatPrice(input: number | null) {
-  if (!input || Number.isNaN(Number(input))) return "TBD";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(Number(input));
 }
 
 function formatSpotsRemaining(spots: number) {
@@ -144,7 +141,8 @@ export default async function GroupSessionDetailPage({ params }: PageProps) {
         dominant_foot,
         team_level,
         focus_areas,
-        long_term_development_notes
+        long_term_development_notes,
+        in_privates
       FROM players
       WHERE parent_id = ${parentId}
       ORDER BY created_at ASC
@@ -218,6 +216,7 @@ export default async function GroupSessionDetailPage({ params }: PageProps) {
 
   const isFull = session.spots_left <= 0;
   const callbackUrl = `/group-sessions/${session.id}`;
+  const hasPrivatePackagePlayer = players.some((player) => player.in_privates);
 
   return (
     <div className="min-h-screen bg-linear-to-b from-white to-emerald-50">
@@ -277,7 +276,26 @@ export default async function GroupSessionDetailPage({ params }: PageProps) {
                   <span className="font-semibold">Location:</span> {session.location || "TBD"}
                 </p>
                 <p>
-                  <span className="font-semibold">Price:</span> {formatPrice(session.price)}
+                  <span className="font-semibold">Price:</span>{" "}
+                  {hasPrivatePackagePlayer ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="line-through text-gray-500">
+                        {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
+                      </span>
+                      <span className="font-semibold text-emerald-700">
+                        {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
+                      </span>
+                    </span>
+                  ) : (
+                    `${formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)} per signup`
+                  )}
+                </p>
+                <p className="text-sm text-emerald-700">
+                  Players in a private package pay{" "}
+                  <span className="font-semibold">
+                    {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
+                  </span>{" "}
+                  per signup.
                 </p>
                 <p>{formatSpotsRemaining(session.spots_left)}</p>
               </div>
@@ -296,7 +314,6 @@ export default async function GroupSessionDetailPage({ params }: PageProps) {
                   sessionId={session.id}
                   isFull={isFull}
                   spotsLeft={session.spots_left}
-                  sessionPrice={session.price}
                   players={players}
                   alreadySignedPlayerIds={alreadySignedPlayerIds}
                   defaultEmergencyContact={parent.name ?? ""}
@@ -308,7 +325,7 @@ export default async function GroupSessionDetailPage({ params }: PageProps) {
                   sessionId={session.id}
                   isFull={isFull}
                   spotsLeft={session.spots_left}
-                  sessionPrice={session.price}
+                  sessionPrice={GROUP_SESSION_STANDARD_SIGNUP_PRICE}
                 />
               )}
             </div>

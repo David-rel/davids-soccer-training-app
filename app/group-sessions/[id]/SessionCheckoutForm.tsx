@@ -1,6 +1,12 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  formatUsdPrice,
+  getGroupSessionSignupPrice,
+  GROUP_SESSION_PRIVATE_SIGNUP_PRICE,
+  GROUP_SESSION_STANDARD_SIGNUP_PRICE,
+} from "@/lib/groupSessionPricing";
 
 type PlayerOption = {
   id: string;
@@ -11,28 +17,19 @@ type PlayerOption = {
   team_level: string | null;
   focus_areas: string | null;
   long_term_development_notes: string | null;
+  in_privates: boolean;
 };
 
 type Props = {
   sessionId: number;
   isFull: boolean;
   spotsLeft: number;
-  sessionPrice: number | null;
   players: PlayerOption[];
   alreadySignedPlayerIds: string[];
   defaultEmergencyContact: string;
   defaultContactPhone: string;
   defaultContactEmail: string;
 };
-
-function formatPrice(input: number | null) {
-  if (!input || Number.isNaN(Number(input))) return "TBD";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(Number(input));
-}
 
 function hasAgeData(player: PlayerOption) {
   if (player.birthdate) return true;
@@ -43,7 +40,6 @@ export default function SessionCheckoutForm({
   sessionId,
   isFull,
   spotsLeft,
-  sessionPrice,
   players,
   alreadySignedPlayerIds,
   defaultEmergencyContact,
@@ -86,11 +82,14 @@ export default function SessionCheckoutForm({
   const selectedPlayersMissingAge = selectedPlayers.filter(
     (player) => !hasAgeData(player)
   );
-
-  const totalLabel =
-    sessionPrice && selectedCount > 0
-      ? formatPrice(sessionPrice * selectedCount)
-      : formatPrice(sessionPrice);
+  const selectedTotal = selectedPlayers.reduce(
+    (total, player) => total + getGroupSessionSignupPrice(player.in_privates),
+    0
+  );
+  const privateSelectedCount = selectedPlayers.filter(
+    (player) => player.in_privates
+  ).length;
+  const standardSelectedCount = selectedCount - privateSelectedCount;
 
   const togglePlayer = (playerId: string) => {
     if (alreadySignedSet.has(playerId)) return;
@@ -222,6 +221,26 @@ export default function SessionCheckoutForm({
                       <div className="text-sm text-gray-600 mt-1">
                         Team: {player.team_level || "—"} • Foot: {player.dominant_foot || "—"}
                       </div>
+                      <div className="mt-1 text-sm text-gray-700">
+                        Price:{" "}
+                        {player.in_privates ? (
+                          <span className="inline-flex items-center gap-2">
+                            <span className="text-gray-500 line-through">
+                              {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
+                            </span>
+                            <span className="font-semibold text-emerald-700">
+                              {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
+                            </span>
+                          </span>
+                        ) : (
+                          <span>{formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}</span>
+                        )}
+                      </div>
+                      {player.in_privates ? (
+                        <div className="mt-1 text-xs text-emerald-700">
+                          Private package discount applied.
+                        </div>
+                      ) : null}
                       {!hasAgeData(player) ? (
                         <div className="mt-2 text-xs text-red-600">
                           Missing birthday/age in profile.
@@ -281,10 +300,21 @@ export default function SessionCheckoutForm({
           <span className="font-semibold">Signups:</span> {selectedCount}
         </p>
         <p>
-          <span className="font-semibold">Price per player:</span> {formatPrice(sessionPrice)}
+          <span className="font-semibold">Price per player:</span>{" "}
+          {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)} standard •{" "}
+          {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)} private package
         </p>
         <p>
-          <span className="font-semibold">Estimated total:</span> {totalLabel}
+          <span className="font-semibold">Selected at standard rate:</span>{" "}
+          {standardSelectedCount}
+        </p>
+        <p>
+          <span className="font-semibold">Selected at private rate:</span>{" "}
+          {privateSelectedCount}
+        </p>
+        <p>
+          <span className="font-semibold">Estimated total:</span>{" "}
+          {formatUsdPrice(selectedTotal)}
         </p>
       </div>
 
