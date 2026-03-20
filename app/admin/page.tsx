@@ -12,7 +12,7 @@ const sections = [
   },
   {
     title: "Group Sessions",
-    description: "Group training area (starting as an empty page for now).",
+    description: "View group sessions, signup counts, and profile-link status.",
     href: "/admin/group-training",
   },
   {

@@ -10,8 +10,7 @@ import { ParentPortalHeader } from "@/app/ui/ParentPortalHeader";
 import { PlayersOnboardingModal } from "@/app/players/ui/PlayersOnboardingModal";
 import {
   formatUsdPrice,
-  GROUP_SESSION_PRIVATE_SIGNUP_PRICE,
-  GROUP_SESSION_STANDARD_SIGNUP_PRICE,
+  getGroupSessionSignupPrice,
 } from "@/lib/groupSessionPricing";
 import { getPointsStateForPlayer } from "@/lib/points/service";
 
@@ -43,7 +42,7 @@ type GroupSessionRow = {
   session_date: string;
   session_date_end: string | null;
   location: string | null;
-  price: string | null;
+  price: number | null;
   curriculum: string | null;
   max_players: number;
   signup_count: number;
@@ -190,7 +189,7 @@ export default async function PlayersPage() {
       gs.session_date::text AS session_date,
       gs.session_date_end::text AS session_date_end,
       gs.location,
-      gs.price::text AS price,
+      gs.price::float8 AS price,
       gs.curriculum,
       gs.max_players,
       COUNT(ps.id)::int AS signup_count
@@ -426,6 +425,14 @@ export default async function PlayersPage() {
                 const alreadySignedUp = alreadySignedUpSessionIds.has(
                   groupSession.id
                 );
+                const standardSignupPrice = getGroupSessionSignupPrice(
+                  false,
+                  groupSession.price
+                );
+                const privateSignupPrice = getGroupSessionSignupPrice(
+                  true,
+                  groupSession.price
+                );
 
                 return (
                   <Link
@@ -479,14 +486,14 @@ export default async function PlayersPage() {
                         {hasPrivatePackagePlayer ? (
                           <span className="inline-flex items-center gap-2">
                             <span className="text-emerald-100 line-through">
-                              {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
+                              {formatUsdPrice(standardSignupPrice)}
                             </span>
                             <span className="font-bold text-white">
-                              {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
+                              {formatUsdPrice(privateSignupPrice)}
                             </span>
                           </span>
                         ) : (
-                          `${formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)} per signup`
+                          `${formatUsdPrice(standardSignupPrice)} per signup`
                         )}
                       </p>
                       {hasPrivatePackagePlayer ? (

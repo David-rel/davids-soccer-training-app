@@ -4,8 +4,6 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   formatUsdPrice,
   getGroupSessionSignupPrice,
-  GROUP_SESSION_PRIVATE_SIGNUP_PRICE,
-  GROUP_SESSION_STANDARD_SIGNUP_PRICE,
 } from "@/lib/groupSessionPricing";
 
 type PlayerOption = {
@@ -22,6 +20,7 @@ type PlayerOption = {
 
 type Props = {
   sessionId: number;
+  sessionPrice: number | null;
   isFull: boolean;
   spotsLeft: number;
   players: PlayerOption[];
@@ -38,6 +37,7 @@ function hasAgeData(player: PlayerOption) {
 
 export default function SessionCheckoutForm({
   sessionId,
+  sessionPrice,
   isFull,
   spotsLeft,
   players,
@@ -82,8 +82,11 @@ export default function SessionCheckoutForm({
   const selectedPlayersMissingAge = selectedPlayers.filter(
     (player) => !hasAgeData(player)
   );
+  const standardSignupPrice = getGroupSessionSignupPrice(false, sessionPrice);
+  const privateSignupPrice = getGroupSessionSignupPrice(true, sessionPrice);
   const selectedTotal = selectedPlayers.reduce(
-    (total, player) => total + getGroupSessionSignupPrice(player.in_privates),
+    (total, player) =>
+      total + getGroupSessionSignupPrice(player.in_privates, sessionPrice),
     0
   );
   const privateSelectedCount = selectedPlayers.filter(
@@ -226,14 +229,14 @@ export default function SessionCheckoutForm({
                         {player.in_privates ? (
                           <span className="inline-flex items-center gap-2">
                             <span className="text-gray-500 line-through">
-                              {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
+                              {formatUsdPrice(standardSignupPrice)}
                             </span>
                             <span className="font-semibold text-emerald-700">
-                              {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
+                              {formatUsdPrice(privateSignupPrice)}
                             </span>
                           </span>
                         ) : (
-                          <span>{formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}</span>
+                          <span>{formatUsdPrice(standardSignupPrice)}</span>
                         )}
                       </div>
                       {player.in_privates ? (
@@ -303,8 +306,8 @@ export default function SessionCheckoutForm({
           <>
             <p>
               <span className="font-semibold">Price per player:</span>{" "}
-              {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)} standard •{" "}
-              {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)} private package
+              {formatUsdPrice(standardSignupPrice)} standard •{" "}
+              {formatUsdPrice(privateSignupPrice)} private package
             </p>
             <p>
               <span className="font-semibold">Selected at standard rate:</span>{" "}
@@ -318,7 +321,7 @@ export default function SessionCheckoutForm({
         ) : (
           <p>
             <span className="font-semibold">Price per player:</span>{" "}
-            {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
+            {formatUsdPrice(standardSignupPrice)}
           </p>
         )}
         <p>

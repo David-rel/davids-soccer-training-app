@@ -585,6 +585,7 @@ export async function createPlayerSignup(data: {
   foot?: string | null;
   team?: string | null;
   notes?: string | null;
+  signup_price?: number | null;
 }): Promise<{ id: number }> {
   const rows = (await sql`
     INSERT INTO player_signups (
@@ -598,6 +599,7 @@ export async function createPlayerSignup(data: {
       foot,
       team,
       notes,
+      signup_price,
       has_paid
     )
     VALUES (
@@ -611,6 +613,7 @@ export async function createPlayerSignup(data: {
       ${cleanNullableText(data.foot)},
       ${cleanNullableText(data.team)},
       ${cleanNullableText(data.notes)},
+      ${data.signup_price ?? null},
       false
     )
     RETURNING id::int AS id
@@ -651,6 +654,7 @@ export async function markPlayerSignupsPaidByCheckoutSession(
   const rows = (await sql`
     UPDATE player_signups
     SET has_paid = true,
+        amount_paid = COALESCE(amount_paid, signup_price),
         stripe_payment_intent_id = COALESCE(${updates.paymentIntentId || null}, stripe_payment_intent_id),
         stripe_charge_id = COALESCE(${updates.chargeId || null}, stripe_charge_id),
         stripe_receipt_url = COALESCE(${updates.receiptUrl || null}, stripe_receipt_url),

@@ -602,6 +602,7 @@ export async function POST(request: NextRequest) {
         foot: player.dominantFoot,
         team: player.teamLevel,
         notes: player.notes,
+        signup_price: getGroupSessionSignupPrice(player.inPrivates, session.price),
       });
 
       signupIds.push(signup.id);
@@ -625,6 +626,8 @@ export async function POST(request: NextRequest) {
       process.env.NEXT_PUBLIC_SITE_URL ||
       request.headers.get("origin") ||
       "http://localhost:3000";
+    const standardSignupPrice = getGroupSessionSignupPrice(false, session.price);
+    const privateSignupPrice = getGroupSessionSignupPrice(true, session.price);
     const standardPlayerCount = selectedPlayers.filter(
       (player) => !player.inPrivates
     ).length;
@@ -643,7 +646,7 @@ export async function POST(request: NextRequest) {
         quantity: standardPlayerCount,
         price_data: {
           currency: "usd",
-          unit_amount: Math.round(getGroupSessionSignupPrice(false) * 100),
+          unit_amount: Math.round(standardSignupPrice * 100),
           product_data: {
             name: `${session.title} (Standard Signup)`,
             description: sessionDescription,
@@ -657,7 +660,7 @@ export async function POST(request: NextRequest) {
         quantity: privatePlayerCount,
         price_data: {
           currency: "usd",
-          unit_amount: Math.round(getGroupSessionSignupPrice(true) * 100),
+          unit_amount: Math.round(privateSignupPrice * 100),
           product_data: {
             name: `${session.title} (Private Package Discount)`,
             description: sessionDescription,

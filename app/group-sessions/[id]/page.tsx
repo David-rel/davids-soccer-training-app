@@ -9,8 +9,7 @@ import { sql } from "@/db";
 import { getGroupSessionById } from "@/lib/groupSessions";
 import {
   formatUsdPrice,
-  GROUP_SESSION_PRIVATE_SIGNUP_PRICE,
-  GROUP_SESSION_STANDARD_SIGNUP_PRICE,
+  getGroupSessionSignupPrice,
 } from "@/lib/groupSessionPricing";
 
 import CheckoutStatusModal from "./CheckoutStatusModal";
@@ -217,6 +216,8 @@ export default async function GroupSessionDetailPage({ params }: PageProps) {
   const isFull = session.spots_left <= 0;
   const callbackUrl = `/group-sessions/${session.id}`;
   const hasPrivatePackagePlayer = players.some((player) => player.in_privates);
+  const standardSignupPrice = getGroupSessionSignupPrice(false, session.price);
+  const privateSignupPrice = getGroupSessionSignupPrice(true, session.price);
 
   return (
     <div className="min-h-screen bg-linear-to-b from-white to-emerald-50">
@@ -280,21 +281,21 @@ export default async function GroupSessionDetailPage({ params }: PageProps) {
                   {hasPrivatePackagePlayer ? (
                     <span className="inline-flex items-center gap-2">
                       <span className="line-through text-gray-500">
-                        {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
+                        {formatUsdPrice(standardSignupPrice)}
                       </span>
                       <span className="font-semibold text-emerald-700">
-                        {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
+                        {formatUsdPrice(privateSignupPrice)}
                       </span>
                     </span>
                   ) : (
-                    `${formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)} per signup`
+                    `${formatUsdPrice(standardSignupPrice)} per signup`
                   )}
                 </p>
                 {hasPrivatePackagePlayer ? (
                   <p className="text-sm text-emerald-700">
                     Players in a private package pay{" "}
                     <span className="font-semibold">
-                      {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
+                      {formatUsdPrice(privateSignupPrice)}
                     </span>{" "}
                     per signup.
                   </p>
@@ -314,6 +315,7 @@ export default async function GroupSessionDetailPage({ params }: PageProps) {
               {parentId ? (
                 <SessionCheckoutForm
                   sessionId={session.id}
+                  sessionPrice={session.price}
                   isFull={isFull}
                   spotsLeft={session.spots_left}
                   players={players}
@@ -327,7 +329,7 @@ export default async function GroupSessionDetailPage({ params }: PageProps) {
                   sessionId={session.id}
                   isFull={isFull}
                   spotsLeft={session.spots_left}
-                  sessionPrice={GROUP_SESSION_STANDARD_SIGNUP_PRICE}
+                  sessionPrice={standardSignupPrice}
                 />
               )}
             </div>

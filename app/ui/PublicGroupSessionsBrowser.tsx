@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   formatUsdPrice,
-  GROUP_SESSION_PRIVATE_SIGNUP_PRICE,
-  GROUP_SESSION_STANDARD_SIGNUP_PRICE,
+  getGroupSessionSignupPrice,
 } from "@/lib/groupSessionPricing";
 
 type SessionCard = {
@@ -122,55 +121,60 @@ export function PublicGroupSessionsBrowser({ sessions }: Props) {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredSessions.map((session) => (
-            <Link
-              key={session.id}
-              href={`/group-sessions/${session.id}`}
-              className="group overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm transition hover:border-emerald-300 hover:shadow-md"
-            >
-              {session.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={session.image_url}
-                  alt={session.title}
-                  className="h-48 w-full object-cover"
-                />
-              ) : (
-                <div className="h-48 w-full bg-emerald-50" />
-              )}
+          {filteredSessions.map((session) => {
+            const standardSignupPrice = getGroupSessionSignupPrice(false, session.price);
+            const privateSignupPrice = getGroupSessionSignupPrice(true, session.price);
 
-              <div className="p-5">
-                <h3 className="text-lg font-semibold text-gray-900">{session.title}</h3>
-                <p className="mt-1 text-sm text-gray-600">{formatSessionDate(session.session_date)}</p>
-                <p className="text-sm text-gray-600">
-                  {formatSessionTimeRange(session.session_date, session.session_date_end)}
-                </p>
-                <p className="mt-2 text-sm text-gray-700">
-                  Location: {session.location || "TBD"}
-                </p>
-                <p className="text-sm text-gray-700">
-                  Standard: {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)} per
-                  signup
-                </p>
-                <p className="text-sm text-emerald-700">
-                  Private package:{" "}
-                  <span className="line-through text-gray-500">
-                    {formatUsdPrice(GROUP_SESSION_STANDARD_SIGNUP_PRICE)}
-                  </span>{" "}
-                  <span className="font-semibold">
-                    {formatUsdPrice(GROUP_SESSION_PRIVATE_SIGNUP_PRICE)}
-                  </span>
-                </p>
-                <p className="text-sm text-gray-700">
-                  {session.spots_left} {session.spots_left === 1 ? "spot" : "spots"} left
-                </p>
+            return (
+              <Link
+                key={session.id}
+                href={`/group-sessions/${session.id}`}
+                className="group overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm transition hover:border-emerald-300 hover:shadow-md"
+              >
+                {session.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={session.image_url}
+                    alt={session.title}
+                    className="h-48 w-full object-cover"
+                  />
+                ) : (
+                  <div className="h-48 w-full bg-emerald-50" />
+                )}
 
-                <div className="mt-4 inline-flex rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition group-hover:bg-emerald-700">
-                  View details
+                <div className="p-5">
+                  <h3 className="text-lg font-semibold text-gray-900">{session.title}</h3>
+                  <p className="mt-1 text-sm text-gray-600">{formatSessionDate(session.session_date)}</p>
+                  <p className="text-sm text-gray-600">
+                    {formatSessionTimeRange(session.session_date, session.session_date_end)}
+                  </p>
+                  <p className="mt-2 text-sm text-gray-700">
+                    Location: {session.location || "TBD"}
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    Standard: {formatUsdPrice(standardSignupPrice)} per
+                    signup
+                  </p>
+                  <p className="text-sm text-emerald-700">
+                    Private package:{" "}
+                    <span className="line-through text-gray-500">
+                      {formatUsdPrice(standardSignupPrice)}
+                    </span>{" "}
+                    <span className="font-semibold">
+                      {formatUsdPrice(privateSignupPrice)}
+                    </span>
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    {session.spots_left} {session.spots_left === 1 ? "spot" : "spots"} left
+                  </p>
+
+                  <div className="mt-4 inline-flex rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition group-hover:bg-emerald-700">
+                    View details
+                  </div>
                 </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
     </section>
