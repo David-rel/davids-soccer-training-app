@@ -318,7 +318,7 @@ export async function POST(request: NextRequest) {
         return {
           name: player.name,
           firstName: split.firstName,
-          lastName: split.lastName || "Player",
+          lastName: split.lastName,
           birthdate: player.birthdate,
           age: calculateAgeFromBirthdate(player.birthdate) ?? player.age ?? 0,
           dominantFoot: cleanNullable(player.dominant_foot),
@@ -573,7 +573,7 @@ export async function POST(request: NextRequest) {
         contactPhone: contactPhone || null,
         parentName: emergencyContact || null,
         firstName: player.firstName,
-        lastName: player.lastName || "Player",
+        lastName: player.lastName,
         playerAge: player.age,
         playerBirthdate: player.birthdate,
         foot: player.dominantFoot,
@@ -594,7 +594,7 @@ export async function POST(request: NextRequest) {
       const signup = await createPlayerSignup({
         group_session_id: groupSessionId,
         first_name: player.firstName,
-        last_name: player.lastName || "Player",
+        last_name: player.lastName,
         emergency_contact: emergencyContact,
         contact_phone: contactPhone || null,
         contact_email: contactEmail,
