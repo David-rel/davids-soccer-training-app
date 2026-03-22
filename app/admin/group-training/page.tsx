@@ -10,10 +10,30 @@ import {
   sendGroupSignupConfirmationEmail,
   sendGroupSignupOwnerNotificationEmail,
 } from "@/lib/groupSignupEmails";
+import PrintSectionButton from "@/app/admin/ui/PrintSectionButton";
 
 export const dynamic = "force-dynamic";
 
 const ADMIN_TIME_ZONE = "America/Phoenix";
+
+const SCORE_CARD_FIELDS = [
+  { key: "juggling", label: "Juggling" },
+  { key: "test_1", label: "Test 1" },
+  { key: "test_2", label: "Test 2" },
+  { key: "test_3", label: "Test 3" },
+  { key: "test_4", label: "Test 4" },
+  { key: "one_on_one_1", label: "1 on 1 - 1" },
+  { key: "one_on_one_2", label: "1 on 1 - 2" },
+  { key: "one_on_one_3", label: "1 on 1 - 3" },
+  { key: "skill_move_1", label: "Skill Move 1" },
+  { key: "skill_move_2", label: "Skill Move 2" },
+  { key: "skill_move_3", label: "Skill Move 3" },
+  { key: "tech", label: "Tech" },
+  { key: "tactic", label: "Tactic" },
+  { key: "grit", label: "Grit" },
+] as const;
+
+type ScoreCardFieldKey = (typeof SCORE_CARD_FIELDS)[number]["key"];
 
 type GroupSessionRow = {
   id: number;
@@ -76,6 +96,13 @@ type SessionEmailRow = {
   price: number | null;
 };
 
+type GroupSessionScorecardRow = {
+  id: number;
+  group_session_id: number;
+  signup_id: number;
+  updated_at: string;
+} & Record<ScoreCardFieldKey, string | null>;
+
 function formatDateTime(value: string | null) {
   if (!value) return "-";
   const parsed = new Date(value);
@@ -98,6 +125,29 @@ function formatMoney(value: number | null) {
 
 function formatPlayerName(firstName: string, lastName: string) {
   return `${firstName} ${lastName}`.trim();
+}
+
+function getSignupListedPrice(signup: GroupSignupRow, sessionPrice: number | null) {
+  return signup.signup_price ?? sessionPrice ?? 0;
+}
+
+function getSignupAmountPaid(signup: GroupSignupRow) {
+  return signup.amount_paid ?? 0;
+}
+
+function isSignupPaidInFull(signup: GroupSignupRow, sessionPrice: number | null) {
+  const listedPrice = getSignupListedPrice(signup, sessionPrice);
+  const amountPaid = getSignupAmountPaid(signup);
+  if (!signup.has_paid) return false;
+  return listedPrice <= 0 ? amountPaid >= 0 : amountPaid >= listedPrice;
+}
+
+function getFinanceStatusLabel(signup: GroupSignupRow, sessionPrice: number | null) {
+  const listedPrice = getSignupListedPrice(signup, sessionPrice);
+  const amountPaid = getSignupAmountPaid(signup);
+  if (isSignupPaidInFull(signup, sessionPrice)) return "Paid";
+  if (amountPaid > 0 && listedPrice > 0) return "Partial";
+  return "Prospect";
 }
 
 function splitName(name: string) {
@@ -130,6 +180,12 @@ function parseNullableMoney(value: FormDataEntryValue | null) {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return null;
   return parsed;
+}
+
+function isUuidLike(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
 }
 
 function sanitizeBlobFilename(name: string) {
@@ -624,8 +680,206 @@ async function addManualSignupAction(formData: FormData) {
   revalidatePath("/admin/group-training");
 }
 
+async function saveSessionScorecardsAction(formData: FormData) {
+  "use server";
+
+  await requireAdminAccess();
+
+  const groupSessionId = parsePositiveInt(formData.get("group_session_id"), 0);
+  if (!groupSessionId) return;
+
+  const sessionSignupRows = (await sql`
+    SELECT id::int AS id
+    FROM player_signups
+    WHERE group_session_id = ${groupSessionId}
+    ORDER BY created_at ASC
+  `) as unknown as Array<{ id: number }>;
+  if (sessionSignupRows.length === 0) {
+    revalidatePath("/admin/group-training");
+    return;
+  }
+
+  const linkedPlayerBySignup = new Map<number, string>();
+  const candidatePlayerIds = new Set<string>();
+  for (const { id: signupId } of sessionSignupRows) {
+    const linkedPlayerId = cleanNullableText(formData.get(`linked_player_id__${signupId}`));
+    if (!linkedPlayerId || !isUuidLike(linkedPlayerId)) continue;
+    linkedPlayerBySignup.set(signupId, linkedPlayerId);
+    candidatePlayerIds.add(linkedPlayerId);
+  }
+
+  let validPlayerIds = new Set<string>();
+  if (candidatePlayerIds.size > 0) {
+    const ids = [...candidatePlayerIds];
+    const existingPlayers = (await sql`
+      SELECT id
+      FROM players
+      WHERE id = ANY(${ids}::uuid[])
+    `) as unknown as Array<{ id: string }>;
+    validPlayerIds = new Set(existingPlayers.map((row) => row.id));
+  }
+
+  for (const { id: signupId } of sessionSignupRows) {
+    const scoreValues = Object.fromEntries(
+      SCORE_CARD_FIELDS.map((field) => [
+        field.key,
+        cleanNullableText(formData.get(`${field.key}__${signupId}`)),
+      ])
+    ) as Record<ScoreCardFieldKey, string | null>;
+    const hasAnyScore = SCORE_CARD_FIELDS.some((field) => {
+      const value = scoreValues[field.key];
+      return Boolean(value && value.trim().length > 0);
+    });
+
+    if (!hasAnyScore) {
+      await sql`
+        DELETE FROM group_session_scorecards
+        WHERE signup_id = ${signupId}
+      `;
+      await sql`
+        DELETE FROM player_group_scores
+        WHERE signup_id = ${signupId}
+      `;
+      continue;
+    }
+
+    const scorecardRows = (await sql`
+      INSERT INTO group_session_scorecards (
+        group_session_id,
+        signup_id,
+        juggling,
+        test_1,
+        test_2,
+        test_3,
+        test_4,
+        one_on_one_1,
+        one_on_one_2,
+        one_on_one_3,
+        skill_move_1,
+        skill_move_2,
+        skill_move_3,
+        tech,
+        tactic,
+        grit
+      )
+      VALUES (
+        ${groupSessionId},
+        ${signupId},
+        ${scoreValues.juggling},
+        ${scoreValues.test_1},
+        ${scoreValues.test_2},
+        ${scoreValues.test_3},
+        ${scoreValues.test_4},
+        ${scoreValues.one_on_one_1},
+        ${scoreValues.one_on_one_2},
+        ${scoreValues.one_on_one_3},
+        ${scoreValues.skill_move_1},
+        ${scoreValues.skill_move_2},
+        ${scoreValues.skill_move_3},
+        ${scoreValues.tech},
+        ${scoreValues.tactic},
+        ${scoreValues.grit}
+      )
+      ON CONFLICT (signup_id)
+      DO UPDATE SET
+        group_session_id = EXCLUDED.group_session_id,
+        juggling = EXCLUDED.juggling,
+        test_1 = EXCLUDED.test_1,
+        test_2 = EXCLUDED.test_2,
+        test_3 = EXCLUDED.test_3,
+        test_4 = EXCLUDED.test_4,
+        one_on_one_1 = EXCLUDED.one_on_one_1,
+        one_on_one_2 = EXCLUDED.one_on_one_2,
+        one_on_one_3 = EXCLUDED.one_on_one_3,
+        skill_move_1 = EXCLUDED.skill_move_1,
+        skill_move_2 = EXCLUDED.skill_move_2,
+        skill_move_3 = EXCLUDED.skill_move_3,
+        tech = EXCLUDED.tech,
+        tactic = EXCLUDED.tactic,
+        grit = EXCLUDED.grit,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING id::int AS id
+    `) as unknown as Array<{ id: number }>;
+    const scorecardId = scorecardRows[0]?.id ?? null;
+
+    const linkedPlayerId = linkedPlayerBySignup.get(signupId) ?? null;
+    if (!linkedPlayerId || !validPlayerIds.has(linkedPlayerId)) {
+      await sql`
+        DELETE FROM player_group_scores
+        WHERE signup_id = ${signupId}
+      `;
+      continue;
+    }
+
+    await sql`
+      INSERT INTO player_group_scores (
+        player_id,
+        group_session_id,
+        signup_id,
+        group_session_scorecard_id,
+        juggling,
+        test_1,
+        test_2,
+        test_3,
+        test_4,
+        one_on_one_1,
+        one_on_one_2,
+        one_on_one_3,
+        skill_move_1,
+        skill_move_2,
+        skill_move_3,
+        tech,
+        tactic,
+        grit
+      )
+      VALUES (
+        ${linkedPlayerId}::uuid,
+        ${groupSessionId},
+        ${signupId},
+        ${scorecardId},
+        ${scoreValues.juggling},
+        ${scoreValues.test_1},
+        ${scoreValues.test_2},
+        ${scoreValues.test_3},
+        ${scoreValues.test_4},
+        ${scoreValues.one_on_one_1},
+        ${scoreValues.one_on_one_2},
+        ${scoreValues.one_on_one_3},
+        ${scoreValues.skill_move_1},
+        ${scoreValues.skill_move_2},
+        ${scoreValues.skill_move_3},
+        ${scoreValues.tech},
+        ${scoreValues.tactic},
+        ${scoreValues.grit}
+      )
+      ON CONFLICT (signup_id)
+      DO UPDATE SET
+        player_id = EXCLUDED.player_id,
+        group_session_id = EXCLUDED.group_session_id,
+        group_session_scorecard_id = EXCLUDED.group_session_scorecard_id,
+        juggling = EXCLUDED.juggling,
+        test_1 = EXCLUDED.test_1,
+        test_2 = EXCLUDED.test_2,
+        test_3 = EXCLUDED.test_3,
+        test_4 = EXCLUDED.test_4,
+        one_on_one_1 = EXCLUDED.one_on_one_1,
+        one_on_one_2 = EXCLUDED.one_on_one_2,
+        one_on_one_3 = EXCLUDED.one_on_one_3,
+        skill_move_1 = EXCLUDED.skill_move_1,
+        skill_move_2 = EXCLUDED.skill_move_2,
+        skill_move_3 = EXCLUDED.skill_move_3,
+        tech = EXCLUDED.tech,
+        tactic = EXCLUDED.tactic,
+        grit = EXCLUDED.grit,
+        updated_at = CURRENT_TIMESTAMP
+    `;
+  }
+
+  revalidatePath("/admin/group-training");
+}
+
 export default async function GroupTrainingPage() {
-  const [sessionRows, signupRows, appPlayerRows] = await Promise.all([
+  const [sessionRows, signupRows, appPlayerRows, scorecardRows] = await Promise.all([
     sql`
       SELECT
         gs.id::int AS id,
@@ -744,17 +998,46 @@ export default async function GroupTrainingPage() {
       LEFT JOIN parents parent ON parent.id = p.parent_id
       ORDER BY p.name ASC, p.created_at DESC
     `,
+    sql`
+      SELECT
+        id::int AS id,
+        group_session_id::int AS group_session_id,
+        signup_id::int AS signup_id,
+        juggling,
+        test_1,
+        test_2,
+        test_3,
+        test_4,
+        one_on_one_1,
+        one_on_one_2,
+        one_on_one_3,
+        skill_move_1,
+        skill_move_2,
+        skill_move_3,
+        tech,
+        tactic,
+        grit,
+        updated_at::text AS updated_at
+      FROM group_session_scorecards
+      ORDER BY updated_at DESC, id DESC
+    `,
   ]);
 
   const sessions = sessionRows as unknown as GroupSessionRow[];
   const signups = signupRows as unknown as GroupSignupRow[];
   const appPlayers = appPlayerRows as unknown as AppPlayerRow[];
+  const scorecards = scorecardRows as unknown as GroupSessionScorecardRow[];
 
   const signupsBySession = new Map<number, GroupSignupRow[]>();
   for (const signup of signups) {
     const existing = signupsBySession.get(signup.group_session_id) ?? [];
     existing.push(signup);
     signupsBySession.set(signup.group_session_id, existing);
+  }
+
+  const scorecardsBySignupId = new Map<number, GroupSessionScorecardRow>();
+  for (const scorecard of scorecards) {
+    scorecardsBySignupId.set(scorecard.signup_id, scorecard);
   }
 
   return (
@@ -1133,13 +1416,29 @@ export default async function GroupTrainingPage() {
             sessions.map((session) => {
               const sessionSignups = signupsBySession.get(session.id) ?? [];
               const totalSignups = sessionSignups.length;
-              const paidSignups = sessionSignups.filter(
-                (signup) => signup.has_paid
+              const paidSignups = sessionSignups.filter((signup) =>
+                isSignupPaidInFull(signup, session.price)
               ).length;
               const prospectSignups = totalSignups - paidSignups;
               const paidSpotsLeft = Math.max(session.max_players - paidSignups, 0);
-              const paidRows = sessionSignups.filter((signup) => signup.has_paid);
-              const prospectRows = sessionSignups.filter((signup) => !signup.has_paid);
+              const paidRows = sessionSignups.filter((signup) =>
+                isSignupPaidInFull(signup, session.price)
+              );
+              const prospectRows = sessionSignups.filter(
+                (signup) => !isSignupPaidInFull(signup, session.price)
+              );
+              const totalListedAmount = sessionSignups.reduce(
+                (sum, signup) => sum + getSignupListedPrice(signup, session.price),
+                0
+              );
+              const totalCollectedAmount = sessionSignups.reduce(
+                (sum, signup) => sum + getSignupAmountPaid(signup),
+                0
+              );
+              const totalBalance = Math.max(totalListedAmount - totalCollectedAmount, 0);
+              const checkInSectionId = `session-${session.id}-check-in`;
+              const financeSectionId = `session-${session.id}-finance`;
+              const scoreCardSectionId = `session-${session.id}-score-cards`;
 
               return (
                 <article
@@ -1227,7 +1526,33 @@ export default async function GroupTrainingPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap gap-3">
+                  <div className="mt-4 flex flex-wrap items-start gap-3">
+                    <details className="relative">
+                      <summary className="list-none cursor-pointer rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 hover:border-emerald-300 [&::-webkit-details-marker]:hidden">
+                        ...
+                      </summary>
+                      <div className="absolute left-0 z-20 mt-2 w-56 rounded-xl border border-emerald-200 bg-white p-2 shadow-lg">
+                        <a
+                          href={`#${checkInSectionId}`}
+                          className="block rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-emerald-50"
+                        >
+                          View check-in sheet
+                        </a>
+                        <a
+                          href={`#${financeSectionId}`}
+                          className="mt-1 block rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-emerald-50"
+                        >
+                          View finance sheet
+                        </a>
+                        <a
+                          href={`#${scoreCardSectionId}`}
+                          className="mt-1 block rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-emerald-50"
+                        >
+                          View score cards
+                        </a>
+                      </div>
+                    </details>
+
                     <details className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3">
                       <summary className="cursor-pointer text-sm font-semibold text-emerald-700">
                         Edit Session
@@ -1579,6 +1904,260 @@ export default async function GroupTrainingPage() {
                         </tbody>
                       </table>
                     </div>
+
+                    <section
+                      id={checkInSectionId}
+                      className="overflow-x-auto rounded-2xl border border-sky-200 bg-white"
+                    >
+                      <div className="flex items-center justify-between gap-3 border-b border-sky-200 bg-sky-50 px-3 py-2">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-sky-800">
+                          Check-In Sheet
+                        </div>
+                        <div className="print-hide">
+                          <PrintSectionButton
+                            sectionId={checkInSectionId}
+                            title={`Session #${session.id} Check-In Sheet`}
+                          />
+                        </div>
+                      </div>
+                      <table className="min-w-full divide-y divide-sky-200 text-sm">
+                        <thead className="bg-sky-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+                          <tr>
+                            <th className="px-3 py-2">#</th>
+                            <th className="px-3 py-2">Player</th>
+                            <th className="px-3 py-2">Status</th>
+                            <th className="px-3 py-2">Contact</th>
+                            <th className="px-3 py-2">Checked In</th>
+                            <th className="px-3 py-2">Arrival Time</th>
+                            <th className="px-3 py-2">Coach Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-sky-100 bg-white">
+                          {sessionSignups.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="px-3 py-4 text-gray-600">
+                                No players or prospects to check in.
+                              </td>
+                            </tr>
+                          ) : (
+                            sessionSignups.map((signup, index) => (
+                              <tr key={`checkin-${signup.id}`} className="align-top">
+                                <td className="px-3 py-2 text-xs text-gray-600">{index + 1}</td>
+                                <td className="px-3 py-2">
+                                  <div className="font-medium text-gray-900">
+                                    {formatPlayerName(signup.first_name, signup.last_name)}
+                                  </div>
+                                  <div className="text-xs text-gray-600">Signup #{signup.id}</div>
+                                </td>
+                                <td className="px-3 py-2 text-xs font-semibold text-gray-700">
+                                  {getFinanceStatusLabel(signup, session.price)}
+                                </td>
+                                <td className="px-3 py-2 text-xs text-gray-700">
+                                  <div>{signup.contact_email || "-"}</div>
+                                  <div>{signup.contact_phone || "-"}</div>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex justify-center">
+                                    <input type="checkbox" className="h-4 w-4" aria-label="Checked in" />
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="text"
+                                    placeholder="4:25 PM"
+                                    className="w-full rounded-lg border border-sky-200 px-2 py-1 text-xs text-gray-700"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="text"
+                                    placeholder="Notes"
+                                    className="w-full rounded-lg border border-sky-200 px-2 py-1 text-xs text-gray-700"
+                                  />
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </section>
+
+                    <section
+                      id={financeSectionId}
+                      className="overflow-x-auto rounded-2xl border border-violet-200 bg-white"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-200 bg-violet-50 px-3 py-2">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-violet-800">
+                          Finance Sheet
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-violet-900">
+                          <span>Listed: {formatMoney(totalListedAmount)}</span>
+                          <span>Collected: {formatMoney(totalCollectedAmount)}</span>
+                          <span>Balance: {formatMoney(totalBalance)}</span>
+                          <span className="print-hide">
+                            <PrintSectionButton
+                              sectionId={financeSectionId}
+                              title={`Session #${session.id} Finance Sheet`}
+                            />
+                          </span>
+                        </div>
+                      </div>
+                      <table className="min-w-full divide-y divide-violet-200 text-sm">
+                        <thead className="bg-violet-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+                          <tr>
+                            <th className="px-3 py-2">#</th>
+                            <th className="px-3 py-2">Player</th>
+                            <th className="px-3 py-2">Status</th>
+                            <th className="px-3 py-2">Listed Price</th>
+                            <th className="px-3 py-2">Paid</th>
+                            <th className="px-3 py-2">Balance</th>
+                            <th className="px-3 py-2">Payment Method</th>
+                            <th className="px-3 py-2">Finance Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-violet-100 bg-white">
+                          {sessionSignups.length === 0 ? (
+                            <tr>
+                              <td colSpan={8} className="px-3 py-4 text-gray-600">
+                                No finance rows for this session yet.
+                              </td>
+                            </tr>
+                          ) : (
+                            sessionSignups.map((signup, index) => {
+                              const listedPrice = getSignupListedPrice(signup, session.price);
+                              const amountPaid = getSignupAmountPaid(signup);
+                              const balance = Math.max(listedPrice - amountPaid, 0);
+
+                              return (
+                                <tr key={`finance-${signup.id}`} className="align-top">
+                                  <td className="px-3 py-2 text-xs text-gray-600">{index + 1}</td>
+                                  <td className="px-3 py-2">
+                                    <div className="font-medium text-gray-900">
+                                      {formatPlayerName(signup.first_name, signup.last_name)}
+                                    </div>
+                                    <div className="text-xs text-gray-600">{signup.contact_email || "-"}</div>
+                                  </td>
+                                  <td className="px-3 py-2 text-xs font-semibold text-gray-700">
+                                    {getFinanceStatusLabel(signup, session.price)}
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-gray-700">
+                                    {formatMoney(listedPrice)}
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-gray-700">
+                                    {formatMoney(amountPaid)}
+                                  </td>
+                                  <td className="px-3 py-2 text-xs font-semibold text-gray-900">
+                                    {formatMoney(balance)}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="text"
+                                      placeholder="Cash / Card / Zelle"
+                                      className="w-full rounded-lg border border-violet-200 px-2 py-1 text-xs text-gray-700"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="text"
+                                      placeholder="Finance notes"
+                                      className="w-full rounded-lg border border-violet-200 px-2 py-1 text-xs text-gray-700"
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </section>
+
+                    <section
+                      id={scoreCardSectionId}
+                      className="overflow-x-auto rounded-2xl border border-indigo-200 bg-white"
+                    >
+                      <form action={saveSessionScorecardsAction}>
+                        <input type="hidden" name="group_session_id" value={session.id} />
+                        <div className="flex items-center justify-between gap-3 border-b border-indigo-200 bg-indigo-50 px-3 py-2">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-indigo-800">
+                            Score Cards
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="submit"
+                              className="print-hide rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+                            >
+                              Save Score Cards
+                            </button>
+                            <div className="print-hide">
+                              <PrintSectionButton
+                                sectionId={scoreCardSectionId}
+                                title={`Session #${session.id} Score Cards`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <table className="min-w-[1600px] divide-y divide-indigo-200 text-sm">
+                          <thead className="bg-indigo-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+                            <tr>
+                              <th className="sticky left-0 z-10 bg-indigo-50 px-3 py-2">Player</th>
+                              {SCORE_CARD_FIELDS.map((field) => (
+                                <th key={`${session.id}-${field.key}`} className="px-3 py-2">
+                                  {field.label}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-indigo-100 bg-white">
+                            {sessionSignups.length === 0 ? (
+                              <tr>
+                                <td
+                                  colSpan={SCORE_CARD_FIELDS.length + 1}
+                                  className="px-3 py-4 text-gray-600"
+                                >
+                                  No players or prospects for score cards.
+                                </td>
+                              </tr>
+                            ) : (
+                              sessionSignups.map((signup) => {
+                                const scorecard = scorecardsBySignupId.get(signup.id);
+
+                                return (
+                                  <tr key={`score-${signup.id}`} className="align-top">
+                                    <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900">
+                                      <input
+                                        type="hidden"
+                                        name={`linked_player_id__${signup.id}`}
+                                        value={signup.linked_player_id ?? ""}
+                                      />
+                                      {formatPlayerName(signup.first_name, signup.last_name)}
+                                      {scorecard?.updated_at && (
+                                        <div className="mt-1 text-[11px] font-normal text-gray-500">
+                                          Saved: {formatDateTime(scorecard.updated_at)}
+                                        </div>
+                                      )}
+                                    </td>
+                                    {SCORE_CARD_FIELDS.map((field) => (
+                                      <td key={`${signup.id}-${field.key}`} className="px-2 py-2">
+                                        <input
+                                          name={`${field.key}__${signup.id}`}
+                                          type="text"
+                                          defaultValue={scorecard?.[field.key] ?? ""}
+                                          aria-label={`${formatPlayerName(
+                                            signup.first_name,
+                                            signup.last_name
+                                          )} ${field.label}`}
+                                          className="w-28 rounded-lg border border-indigo-200 px-2 py-1 text-xs text-gray-700"
+                                        />
+                                      </td>
+                                    ))}
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </form>
+                    </section>
                   </div>
                 </article>
               );
