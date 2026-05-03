@@ -43,6 +43,13 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function digitsOnly(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 11 && digits.startsWith("1")
+    ? digits.slice(1)
+    : digits.slice(0, 10);
+}
+
 export default function GuestSessionSignupForm({
   sessionId,
   isFull,
@@ -94,7 +101,7 @@ export default function GuestSessionSignupForm({
 
     const cleanParentName = parentName.trim();
     const cleanParentEmail = parentEmail.trim().toLowerCase();
-    const cleanParentPhone = parentPhone.trim();
+    const cleanParentPhone = digitsOnly(parentPhone);
 
     if (!cleanParentName || !cleanParentEmail || !cleanParentPhone || !password) {
       setError("Parent name, email, phone, and password are required.");
@@ -239,9 +246,11 @@ export default function GuestSessionSignupForm({
           <span className="text-sm font-semibold text-gray-700">Parent phone *</span>
           <input
             value={parentPhone}
-            onChange={(event) => setParentPhone(event.target.value)}
+            onChange={(event) => setParentPhone(digitsOnly(event.target.value))}
             required
-            placeholder="Best number for updates"
+            placeholder="5555555555"
+            inputMode="numeric"
+            pattern="[0-9]*"
             className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-black placeholder:text-gray-500 caret-black outline-none focus:border-emerald-500"
           />
         </label>

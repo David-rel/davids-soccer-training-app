@@ -35,6 +35,13 @@ function hasAgeData(player: PlayerOption) {
   return Number.isInteger(player.age) && (player.age || 0) > 0;
 }
 
+function digitsOnly(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 11 && digits.startsWith("1")
+    ? digits.slice(1)
+    : digits.slice(0, 10);
+}
+
 export default function SessionCheckoutForm({
   sessionId,
   sessionPrice,
@@ -52,7 +59,7 @@ export default function SessionCheckoutForm({
   );
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [emergencyContact, setEmergencyContact] = useState(defaultEmergencyContact);
-  const [contactPhone, setContactPhone] = useState(defaultContactPhone);
+  const [contactPhone, setContactPhone] = useState(digitsOnly(defaultContactPhone));
   const [contactEmail, setContactEmail] = useState(defaultContactEmail);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -136,6 +143,7 @@ export default function SessionCheckoutForm({
     setIsSubmitting(true);
 
     try {
+      const cleanContactPhone = digitsOnly(contactPhone);
       const response = await fetch("/api/group-sessions/checkout", {
         method: "POST",
         headers: {
@@ -145,7 +153,7 @@ export default function SessionCheckoutForm({
           groupSessionId: sessionId,
           playerIds: selectedPlayerIds,
           emergencyContact,
-          contactPhone,
+          contactPhone: cleanContactPhone,
           contactEmail,
           termsAccepted,
         }),
@@ -291,8 +299,10 @@ export default function SessionCheckoutForm({
           <span className="text-sm font-semibold text-gray-700">Contact phone</span>
           <input
             value={contactPhone}
-            onChange={(e) => setContactPhone(e.target.value)}
-            placeholder="Best number for updates"
+            onChange={(e) => setContactPhone(digitsOnly(e.target.value))}
+            placeholder="5555555555"
+            inputMode="numeric"
+            pattern="[0-9]*"
             className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-black placeholder:text-gray-500 caret-black outline-none focus:border-emerald-500"
           />
         </label>

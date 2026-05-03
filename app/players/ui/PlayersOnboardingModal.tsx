@@ -53,6 +53,13 @@ function clean(value: string | null | undefined) {
   return String(value ?? "").trim();
 }
 
+function digitsOnly(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 11 && digits.startsWith("1")
+    ? digits.slice(1)
+    : digits.slice(0, 10);
+}
+
 function toPlayerDraft(player: PlayerSummary): PlayerDraft {
   return {
     name: clean(player.name),
@@ -110,7 +117,7 @@ export function PlayersOnboardingModal({ parent, players }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const [email, setEmail] = useState(clean(parent.email));
-  const [phone, setPhone] = useState(clean(parent.phone));
+  const [phone, setPhone] = useState(digitsOnly(clean(parent.phone)));
   const [playerDrafts, setPlayerDrafts] = useState<Record<string, PlayerDraft>>(
     () =>
       Object.fromEntries(players.map((player) => [player.id, toPlayerDraft(player)]))
@@ -241,9 +248,11 @@ export function PlayersOnboardingModal({ parent, players }: Props) {
                       value={phone}
                       onChange={(e) => {
                         setError(null);
-                        setPhone(e.target.value);
+                        setPhone(digitsOnly(e.target.value));
                       }}
-                      placeholder="+15555555555"
+                      placeholder="5555555555"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
                     />
                   </div>

@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 
 import { assertAdmin } from "@/lib/adminAuth";
 import { sql } from "@/db";
-import { normalizePhoneForStorage } from "@/lib/phone";
+import { normalizePhoneForLookup, normalizePhoneForStorage } from "@/lib/phone";
 
 type ParentRow = {
   id: string;
@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
   const phone = normalizePhoneForStorage(
     providedPhoneRaw || crmParent?.phone || ""
   );
+  const phoneLookup = normalizePhoneForLookup(phone);
 
   if (!email && !phone) {
     return new Response("Email or phone is required.", { status: 400 });
@@ -135,6 +136,33 @@ export async function POST(req: NextRequest) {
     return new Response("Password must be at least 6 characters.", {
       status: 400,
     });
+  }
+
+  if (email) {
+    const emailConflict = (await sql`
+      SELECT id
+      FROM parents
+      WHERE lower(email) = lower(${email})
+      ORDER BY created_at ASC
+      LIMIT 1
+    `) as unknown as Array<{ id: string }>;
+    if (emailConflict[0]) {
+      return new Response("That email is already in use.", { status: 409 });
+    }
+  }
+
+  if (phoneLookup) {
+    const phoneConflict = (await sql`
+      SELECT id
+      FROM parents
+      WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${phoneLookup}
+         OR right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ${phoneLookup}
+      ORDER BY created_at ASC
+      LIMIT 1
+    `) as unknown as Array<{ id: string }>;
+    if (phoneConflict[0]) {
+      return new Response("That phone number is already in use.", { status: 409 });
+    }
   }
 
   const passwordHash = await bcrypt.hash(password, 10);

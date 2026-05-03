@@ -12,7 +12,7 @@ import {
 } from "@/lib/groupSessions";
 import { sendNewParentSignupEmail } from "@/lib/email";
 import { getGroupSessionSignupPrice } from "@/lib/groupSessionPricing";
-import { normalizePhoneForStorage } from "@/lib/phone";
+import { normalizePhoneForLookup, normalizePhoneForStorage } from "@/lib/phone";
 import { getStripe } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
@@ -364,9 +364,17 @@ export async function POST(request: NextRequest) {
       }
 
       const normalizedPhone = normalizePhoneForStorage(rawPhone);
-      if (!normalizedPhone) {
+      const phoneLookup = normalizePhoneForLookup(rawPhone);
+      if (!normalizedPhone || !phoneLookup) {
         return NextResponse.json(
           { error: "A valid parent phone is required" },
+          { status: 400 }
+        );
+      }
+
+      if (phoneLookup.length !== 10) {
+        return NextResponse.json(
+          { error: "Please enter a 10-digit parent phone number." },
           { status: 400 }
         );
       }
@@ -388,11 +396,12 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const phoneDigits = normalizeDigits(normalizedPhone);
       const phoneConflict = (await sql`
         SELECT id
         FROM parents
-        WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${phoneDigits}
+        WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${phoneLookup}
+           OR right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ${phoneLookup}
+        ORDER BY created_at ASC
         LIMIT 1
       `) as unknown as Array<{ id: string }>;
 
@@ -717,6 +726,10 @@ export async function POST(request: NextRequest) {
 
     if (message.startsWith("Player ")) {
       return NextResponse.json({ error: message }, { status: 400 });
+    }
+
+    if (message.includes("already exists")) {
+      return NextResponse.json({ error: message }, { status: 409 });
     }
 
     return NextResponse.json({ error: "Failed to start checkout" }, { status: 500 });

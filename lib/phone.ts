@@ -1,19 +1,22 @@
+export function normalizePhoneDigits(
+  value: string | null | undefined
+): string {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
 export function normalizePhoneForStorage(
   value: string | null | undefined
 ): string | null {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return null;
-  const hasPlus = raw.startsWith("+");
-  return hasPlus ? `+${digits}` : digits;
+  return normalizePhoneForLookup(value);
 }
 
 export function normalizePhoneForLookup(
   value: string | null | undefined
 ): string | null {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-  const digits = raw.replace(/\D/g, "");
-  return digits || null;
+  const digits = normalizePhoneDigits(value);
+  if (!digits) return null;
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return digits.slice(1);
+  }
+  return digits;
 }

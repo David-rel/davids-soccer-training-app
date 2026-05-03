@@ -7,12 +7,19 @@ type Props = {
   initialPhone: string | null;
 };
 
+function digitsOnly(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 11 && digits.startsWith("1")
+    ? digits.slice(1)
+    : digits.slice(0, 10);
+}
+
 export function ParentAccountSettings({ initialEmail, initialPhone }: Props) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const [email, setEmail] = useState(initialEmail ?? "");
-  const [phone, setPhone] = useState(initialPhone ?? "");
+  const [phone, setPhone] = useState(digitsOnly(initialPhone ?? ""));
 
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -104,8 +111,10 @@ export function ParentAccountSettings({ initialEmail, initialPhone }: Props) {
                       </label>
                       <input
                         value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="+15555555555"
+                        onChange={(e) => setPhone(digitsOnly(e.target.value))}
+                        placeholder="5555555555"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
                       />
                     </div>

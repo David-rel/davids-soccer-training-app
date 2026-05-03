@@ -8,6 +8,13 @@ type Props = {
   callbackUrl?: string;
 };
 
+function digitsOnly(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 11 && digits.startsWith("1")
+    ? digits.slice(1)
+    : digits.slice(0, 10);
+}
+
 export function SignupForm({ callbackUrl = "/players" }: Props) {
   const [isPending, startTransition] = useTransition();
   const searchParams = useSearchParams();
@@ -27,7 +34,7 @@ export function SignupForm({ callbackUrl = "/players" }: Props) {
         setError(null);
 
         const trimmedEmail = email.trim().toLowerCase();
-        const trimmedPhone = phone.trim();
+        const trimmedPhone = digitsOnly(phone);
 
         if (!trimmedEmail || !trimmedPhone || !password) {
           setError("Email, phone number, and password are required.");
@@ -96,8 +103,10 @@ export function SignupForm({ callbackUrl = "/players" }: Props) {
           id="signup-phone"
           name="phone"
           value={phone}
-          onChange={(e) => setPhone(e.target.value)}
+          onChange={(e) => setPhone(digitsOnly(e.target.value))}
           autoComplete="tel"
+          inputMode="numeric"
+          pattern="[0-9]*"
           required
           className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 placeholder:text-gray-500 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
         />

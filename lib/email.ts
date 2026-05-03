@@ -37,6 +37,12 @@ export type NewParentSignupEmailParams = {
   createdAt: string;
 };
 
+export type PasswordResetCodeEmailParams = {
+  to: string;
+  code: string;
+  expiresInMinutes: number;
+};
+
 export async function sendNewContentSubmissionEmail(
   params: NewContentSubmissionEmailParams
 ): Promise<{ success: boolean; error?: string }> {
@@ -124,6 +130,44 @@ export async function sendNewParentSignupEmail(
     return { success: true };
   } catch (error) {
     console.error("Parent signup email send error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to send email",
+    };
+  }
+}
+
+export async function sendPasswordResetCodeEmail(
+  params: PasswordResetCodeEmailParams
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const transport = getTransporter();
+
+    await transport.sendMail({
+      from: `"Davids Private Training App" <${GMAIL_USER}>`,
+      to: params.to,
+      subject: "Your password reset code",
+      html: `
+        <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #059669;">Password Reset Code</h2>
+          <p style="color: #374151; font-size: 16px;">
+            Use this code to reset your parent portal password.
+          </p>
+          <div style="background: #f0fdf4; border-left: 4px solid #059669; padding: 16px; margin: 20px 0;">
+            <p style="margin: 0; color: #111827; font-size: 28px; font-weight: 700; letter-spacing: 4px;">
+              ${params.code}
+            </p>
+          </div>
+          <p style="color: #6b7280; font-size: 14px;">
+            This code expires in ${params.expiresInMinutes} minutes. If you did not request it, you can ignore this email.
+          </p>
+        </div>
+      `,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Password reset email send error:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to send email",

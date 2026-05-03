@@ -34,7 +34,14 @@ export const authOptions: NextAuthOptions = {
 
         const rows = (isEmail
           ? await sql`SELECT id, email, phone, password_hash, is_admin FROM parents WHERE lower(email) = lower(${identifier}) LIMIT 1`
-          : await sql`SELECT id, email, phone, password_hash, is_admin FROM parents WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${phoneLookup} LIMIT 1`) as unknown as ParentRow[];
+          : await sql`
+              SELECT id, email, phone, password_hash, is_admin
+              FROM parents
+              WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${phoneLookup}
+                 OR right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ${phoneLookup}
+              ORDER BY created_at ASC
+              LIMIT 1
+            `) as unknown as ParentRow[];
 
         const parent = rows[0];
         if (!parent) return null;

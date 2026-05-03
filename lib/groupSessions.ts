@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
 import { sql } from "@/db";
-import { normalizePhoneForStorage } from "@/lib/phone";
+import { normalizePhoneForLookup, normalizePhoneForStorage } from "@/lib/phone";
 
 const PORTAL_PASSWORD_CHARSET =
   "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
@@ -211,6 +211,10 @@ export async function provisionParentAndPlayerForGroupSignup(data: {
 
   const parentName = cleanNullableText(data.parentName);
   const parentPhone = normalizePhoneForStorage(data.contactPhone);
+  const parentPhoneLookup = normalizePhoneForLookup(data.contactPhone);
+  if (parentPhone && parentPhoneLookup?.length !== 10) {
+    throw new Error("Please enter a 10-digit parent phone number.");
+  }
   const dominantFoot = cleanNullableText(data.foot);
   const teamLevel = cleanNullableText(data.team);
   const developmentNotes = cleanNullableText(data.notes);
@@ -248,6 +252,16 @@ export async function provisionParentAndPlayerForGroupSignup(data: {
       SELECT id, email, phone, name, crm_parent_id
       FROM parents
       WHERE lower(email) = lower(${normalizedEmail})
+        OR (
+          ${parentPhoneLookup}::text IS NOT NULL
+          AND (
+            regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${parentPhoneLookup}
+            OR right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ${parentPhoneLookup}
+          )
+        )
+      ORDER BY
+        CASE WHEN lower(email) = lower(${normalizedEmail}) THEN 0 ELSE 1 END,
+        created_at ASC
       LIMIT 1
     `) as unknown as Array<{
     id: string;
@@ -278,8 +292,12 @@ export async function provisionParentAndPlayerForGroupSignup(data: {
       const phoneConflict = (await sql`
         SELECT id
         FROM parents
-        WHERE phone = ${parentPhone}
+        WHERE (
+            regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${parentPhoneLookup}
+            OR right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ${parentPhoneLookup}
+          )
           AND id <> ${parentId}
+        ORDER BY created_at ASC
         LIMIT 1
       `) as unknown as Array<{ id: string }>;
 
@@ -316,17 +334,21 @@ export async function provisionParentAndPlayerForGroupSignup(data: {
     generatedPassword = cleanNullableText(data.portalPassword) ? null : passwordToStore;
     const passwordHash = await bcrypt.hash(passwordToStore, 10);
 
-    let phoneForInsert = parentPhone;
-    if (phoneForInsert) {
+    const phoneForInsert = parentPhone;
+    if (phoneForInsert && parentPhoneLookup) {
       const phoneConflict = (await sql`
         SELECT id
         FROM parents
-        WHERE phone = ${phoneForInsert}
+        WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${parentPhoneLookup}
+           OR right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ${parentPhoneLookup}
+        ORDER BY created_at ASC
         LIMIT 1
       `) as unknown as Array<{ id: string }>;
 
       if (phoneConflict[0]) {
-        phoneForInsert = null;
+        throw new Error(
+          "An account with this phone already exists. Log in with that email/phone instead."
+        );
       }
     }
 
@@ -359,7 +381,8 @@ export async function provisionParentAndPlayerForGroupSignup(data: {
       const crmByPhone = (await sql`
         SELECT id
         FROM crm_parents
-        WHERE phone = ${parentPhone}
+        WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${parentPhoneLookup}
+           OR right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ${parentPhoneLookup}
         ORDER BY id ASC
         LIMIT 1
       `) as unknown as Array<{ id: number }>;

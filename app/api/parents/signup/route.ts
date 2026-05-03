@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 
 import { sql } from "@/db";
 import { sendNewParentSignupEmail } from "@/lib/email";
-import { normalizePhoneForStorage } from "@/lib/phone";
+import { normalizePhoneForLookup, normalizePhoneForStorage } from "@/lib/phone";
 
 type SignupBody = {
   email?: string;
@@ -16,11 +16,19 @@ export async function POST(req: NextRequest) {
 
   const email = String(body?.email ?? "").trim().toLowerCase();
   const phone = normalizePhoneForStorage(body?.phone ?? "");
+  const phoneLookup = normalizePhoneForLookup(body?.phone ?? "");
   const password = String(body?.password ?? "");
 
-  if (!email || !phone || !password) {
+  if (!email || !phone || !phoneLookup || !password) {
     return Response.json(
       { error: "Email, phone number, and password are required." },
+      { status: 400 }
+    );
+  }
+
+  if (phoneLookup.length !== 10) {
+    return Response.json(
+      { error: "Please enter a 10-digit phone number." },
       { status: 400 }
     );
   }
@@ -44,7 +52,7 @@ export async function POST(req: NextRequest) {
   `) as unknown as Array<{ id: string }>;
   if (emailConflict[0]) {
     return Response.json(
-      { error: "That email is already in use." },
+      { error: "That email already has an account. Log in with that email/phone instead." },
       { status: 409 }
     );
   }
@@ -52,12 +60,14 @@ export async function POST(req: NextRequest) {
   const phoneConflict = (await sql`
     SELECT id
     FROM parents
-    WHERE phone = ${phone}
+    WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${phoneLookup}
+       OR right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ${phoneLookup}
+    ORDER BY created_at ASC
     LIMIT 1
   `) as unknown as Array<{ id: string }>;
   if (phoneConflict[0]) {
     return Response.json(
-      { error: "That phone number is already in use." },
+      { error: "That phone number already has an account. Log in with that email/phone instead." },
       { status: 409 }
     );
   }

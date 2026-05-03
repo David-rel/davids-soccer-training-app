@@ -123,8 +123,12 @@ export async function PATCH(
     const phoneConflict = (await sql`
       SELECT id
       FROM parents
-      WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${nextPhoneLookup}
+      WHERE (
+          regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${nextPhoneLookup}
+          OR right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ${nextPhoneLookup}
+        )
         AND id <> ${parentId}
+      ORDER BY created_at ASC
       LIMIT 1
     `) as unknown as Array<{ id: string }>;
     if (phoneConflict[0]) {

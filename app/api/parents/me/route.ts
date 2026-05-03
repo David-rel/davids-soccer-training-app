@@ -90,12 +90,20 @@ export async function PATCH(req: Request) {
   const currentPhoneLookup = normalizePhoneForLookup(parent.phone);
   const nextPhoneLookup = normalizePhoneForLookup(cleanedPhone);
 
+  if (cleanedPhone && nextPhoneLookup?.length !== 10) {
+    return json({ error: "Please enter a 10-digit phone number." }, 400);
+  }
+
   if (nextPhoneLookup && nextPhoneLookup !== currentPhoneLookup) {
     const existing = (await sql`
       SELECT id
       FROM parents
-      WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${nextPhoneLookup}
+      WHERE (
+          regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${nextPhoneLookup}
+          OR right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ${nextPhoneLookup}
+        )
         AND id <> ${parentId}
+      ORDER BY created_at ASC
       LIMIT 1
     `) as unknown as { id: string }[];
     if (existing[0]) {
