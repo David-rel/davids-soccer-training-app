@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { sql } from "@/db";
 import { streamOpenAIResponse } from "@/lib/openai-chat";
 import { preparePlayerContext } from "@/lib/chat-context";
+import { assertOwnsPlayer } from "@/lib/assertOwnsPlayer";
 
 type ConversationRow = {
   id: string;
@@ -11,32 +11,6 @@ type ConversationRow = {
   last_message_at: string | null;
   created_at: string;
 };
-
-async function assertOwnsPlayer(req: NextRequest, playerId: string) {
-  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
-  const parentId = token?.sub;
-  if (!parentId) {
-    return {
-      ok: false as const,
-      res: new Response("Unauthorized", { status: 401 }),
-    };
-  }
-
-  const owns = await sql`
-    SELECT 1
-    FROM players
-    WHERE id = ${playerId} AND parent_id = ${parentId}
-    LIMIT 1
-  `;
-
-  if (owns.length === 0) {
-    return {
-      ok: false as const,
-      res: new Response("Not found", { status: 404 }),
-    };
-  }
-  return { ok: true as const, parentId };
-}
 
 async function getOrCreateConversation(
   playerId: string

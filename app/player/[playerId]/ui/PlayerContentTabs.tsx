@@ -1,42 +1,265 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import {
+  BarChart2,
+  Target,
+  FileText,
+  Upload,
+  LayoutDashboard,
+  Settings,
+  ChevronRight,
+} from "lucide-react";
 import { PlayerInsights } from "./PlayerInsights";
 import { PlayerGoals } from "./PlayerGoals";
-import { PlayerSessions } from "./PlayerSessions";
-import { PlayerVideos } from "./PlayerVideos";
 import { PlayerUploads } from "./PlayerUploads";
+import { PlayerSessions } from "./PlayerSessions";
 import {
   parsePlayerHash,
   scrollToPlayerSection,
-  type PlayerVideoMode,
   updatePlayerHash,
 } from "./playerHashNavigation";
 
-type TabType = "tests" | "goals" | "sessions" | "videos" | "uploads";
+type TabType =
+  | "tests"
+  | "goals"
+  | "reports"
+  | "uploads"
+  | "dashboard"
+  | "settings";
+
 type TabTargets = {
   testId: string | null;
   goalId: string | null;
-  sessionId: string | null;
-  videoId: string | null;
   uploadId: string | null;
-  videoMode: PlayerVideoMode | null;
 };
 
 interface PlayerContentTabsProps {
   playerId: string;
   isAdminMode?: boolean;
+  settingsContent: ReactNode;
 }
 
-export default function PlayerContentTabs({ playerId, isAdminMode }: PlayerContentTabsProps) {
-  const [activeTab, setActiveTab] = useState<TabType>("tests");
+const SIDEBAR_ITEMS: {
+  id: TabType;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "tests", label: "My Progress", icon: BarChart2 },
+  { id: "goals", label: "Goals", icon: Target },
+  { id: "reports", label: "Feedback & Reports", icon: FileText },
+  { id: "uploads", label: "Extra Help", icon: Upload },
+  { id: "settings", label: "Settings", icon: Settings },
+];
+
+function TabPageHeader({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="mb-6 flex items-start gap-3 border-b border-gray-100 pb-5">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100">
+        <Icon className="h-5 w-5 text-emerald-700" />
+      </div>
+      <div>
+        <h2 className="text-xl font-bold text-gray-900">{title}</h2>
+        <p className="mt-0.5 text-sm text-gray-500">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+type GoalRow = { completed: boolean };
+type SessionRow = { session_date: string };
+type TestRow = { test_date: string };
+
+function PlayerDashboard({
+  playerId,
+  onNavigate,
+}: {
+  playerId: string;
+  onNavigate: (tab: TabType) => void;
+}) {
+  const [goalCounts, setGoalCounts] = useState<{
+    done: number;
+    remaining: number;
+  } | null>(null);
+  const [lastSession, setLastSession] = useState<string | null | undefined>(
+    undefined
+  );
+  const [lastTest, setLastTest] = useState<string | null | undefined>(
+    undefined
+  );
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`/api/players/${playerId}/goals`)
+        .then((r) => r.json())
+        .catch(() => null),
+      fetch(`/api/players/${playerId}/sessions`)
+        .then((r) => r.json())
+        .catch(() => null),
+      fetch(`/api/players/${playerId}/tests`)
+        .then((r) => r.json())
+        .catch(() => null),
+    ]).then(([gls, sess, tsts]) => {
+      if (Array.isArray(gls)) {
+        setGoalCounts({
+          done: gls.filter((g: GoalRow) => g.completed).length,
+          remaining: gls.filter((g: GoalRow) => !g.completed).length,
+        });
+      }
+      if (Array.isArray(sess) && sess.length > 0) {
+        setLastSession(
+          new Date((sess[0] as SessionRow).session_date).toLocaleDateString(
+            "en-US",
+            { month: "short", day: "numeric" }
+          )
+        );
+      } else {
+        setLastSession(null);
+      }
+      if (Array.isArray(tsts) && tsts.length > 0) {
+        const sorted = [...(tsts as TestRow[])].sort(
+          (a, b) =>
+            new Date(b.test_date).getTime() - new Date(a.test_date).getTime()
+        );
+        setLastTest(
+          new Date(sorted[0].test_date).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          })
+        );
+      } else {
+        setLastTest(null);
+      }
+    });
+  }, [playerId]);
+
+  const cards: {
+    icon: React.ComponentType<{ className?: string }>;
+    tab: TabType;
+    title: string;
+    stat: string;
+    sub: string;
+    iconBg: string;
+    iconColor: string;
+  }[] = [
+    {
+      icon: BarChart2,
+      tab: "tests",
+      title: "My Progress",
+      stat:
+        lastTest !== undefined
+          ? lastTest
+            ? `Last test: ${lastTest}`
+            : "No tests recorded yet"
+          : "—",
+      sub:
+        lastTest !== undefined && !lastTest
+          ? "Tests are added by Coach David"
+          : "Track scores across all test types",
+      iconBg: "bg-blue-50",
+      iconColor: "text-blue-600",
+    },
+    {
+      icon: Target,
+      tab: "goals",
+      title: "Goals",
+      stat: goalCounts
+        ? `${goalCounts.done} complete · ${goalCounts.remaining} to go`
+        : "—",
+      sub:
+        goalCounts?.remaining === 0 && (goalCounts?.done ?? 0) > 0
+          ? "Great work — all goals complete!"
+          : "Set and track your training goals",
+      iconBg: "bg-emerald-50",
+      iconColor: "text-emerald-600",
+    },
+    {
+      icon: FileText,
+      tab: "reports",
+      title: "Feedback & Reports",
+      stat:
+        lastSession !== undefined
+          ? lastSession
+            ? `Last session: ${lastSession}`
+            : "No sessions yet"
+          : "—",
+      sub:
+        lastSession !== undefined && !lastSession
+          ? "Sessions are added by Coach David"
+          : "Review notes from each training session",
+      iconBg: "bg-purple-50",
+      iconColor: "text-purple-600",
+    },
+    {
+      icon: Upload,
+      tab: "uploads",
+      title: "Extra Help",
+      stat: "Send clips to Coach David",
+      sub: "Get personalized feedback on your game",
+      iconBg: "bg-orange-50",
+      iconColor: "text-orange-600",
+    },
+  ];
+
+  return (
+    <div>
+      <TabPageHeader
+        icon={LayoutDashboard}
+        title="Dashboard"
+        description="Your training hub — see everything at a glance."
+      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        {cards.map(({ icon: Icon, tab, title, stat, sub, iconBg, iconColor }) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => onNavigate(tab)}
+            className="group rounded-2xl border border-gray-100 bg-white p-5 text-left shadow-sm transition hover:border-emerald-200 hover:shadow-md"
+          >
+            <div className="flex items-start justify-between">
+              <div
+                className={`flex h-9 w-9 items-center justify-center rounded-xl ${iconBg}`}
+              >
+                <Icon className={`h-4 w-4 ${iconColor}`} />
+              </div>
+              <ChevronRight className="h-4 w-4 text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-emerald-500" />
+            </div>
+            <div className="mt-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                {title}
+              </div>
+              <div className="mt-1 text-sm font-semibold text-gray-900">
+                {stat}
+              </div>
+              <div className="mt-0.5 text-xs text-gray-500">{sub}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function PlayerContentTabs({
+  playerId,
+  isAdminMode,
+  settingsContent,
+}: PlayerContentTabsProps) {
+  const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [tabTargets, setTabTargets] = useState<TabTargets>({
     testId: null,
     goalId: null,
-    sessionId: null,
-    videoId: null,
     uploadId: null,
-    videoMode: null,
   });
 
   useEffect(() => {
@@ -47,18 +270,17 @@ export default function PlayerContentTabs({ playerId, isAdminMode }: PlayerConte
       if (hashState.tab) {
         setActiveTab(hashState.tab);
       }
-
       setTabTargets({
         testId: hashState.testId,
         goalId: hashState.goalId,
-        sessionId: hashState.sessionId,
-        videoId: hashState.videoId,
         uploadId: hashState.uploadId,
-        videoMode: hashState.videoMode,
       });
-
-      if (hashState.section === "tests" || hashState.tab) {
-        scrollToPlayerSection("player-tests-section");
+      if (
+        hashState.section === "tests" ||
+        hashState.section === "workspace" ||
+        hashState.tab
+      ) {
+        scrollToPlayerSection("player-section");
       }
     };
 
@@ -71,101 +293,106 @@ export default function PlayerContentTabs({ playerId, isAdminMode }: PlayerConte
 
   function handleTabClick(tab: TabType) {
     setActiveTab(tab);
-    updatePlayerHash({ section: "tests", tab });
+    updatePlayerHash({ section: "workspace", tab });
   }
 
   return (
     <section
-      id="player-tests-section"
-      className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm"
+      id="player-section"
+      className="rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm sm:p-6"
     >
-      {/* Tab Navigation */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <button
-          onClick={() => handleTabClick("tests")}
-          className={
-            activeTab === "tests"
-              ? "rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition"
-              : "rounded-xl border border-emerald-200 bg-white px-6 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
-          }
-        >
-          Tests & Progressions
-        </button>
-        <button
-          onClick={() => handleTabClick("goals")}
-          className={
-            activeTab === "goals"
-              ? "rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition"
-              : "rounded-xl border border-emerald-200 bg-white px-6 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
-          }
-        >
-          Your Goals
-        </button>
-        <button
-          onClick={() => handleTabClick("sessions")}
-          className={
-            activeTab === "sessions"
-              ? "rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition"
-              : "rounded-xl border border-emerald-200 bg-white px-6 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
-          }
-        >
-          Training Sessions
-        </button>
-        <button
-          onClick={() => handleTabClick("videos")}
-          className={
-            activeTab === "videos"
-              ? "rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition"
-              : "rounded-xl border border-emerald-200 bg-white px-6 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
-          }
-        >
-          Videos
-        </button>
-        <button
-          onClick={() => handleTabClick("uploads")}
-          className={
-            activeTab === "uploads"
-              ? "rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition"
-              : "rounded-xl border border-emerald-200 bg-white px-6 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
-          }
-        >
-          Upload Content
-        </button>
-      </div>
+      <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <aside className="lg:border-r lg:border-emerald-100 lg:pr-4">
+          <nav className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-1">
+            {SIDEBAR_ITEMS.map(({ id, label, icon: Icon }) => {
+              const isActive = activeTab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => handleTabClick(id)}
+                  className={
+                    isActive
+                      ? "flex items-center gap-3 rounded-xl bg-emerald-600 px-4 py-3 text-left text-sm font-semibold text-white transition"
+                      : "flex items-center gap-3 rounded-xl border border-emerald-100 bg-white px-4 py-3 text-left text-sm font-semibold text-emerald-800 transition hover:border-emerald-200 hover:bg-emerald-50"
+                  }
+                >
+                  <Icon
+                    className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : "text-emerald-500"}`}
+                  />
+                  {label}
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
 
-      {/* Tab Content */}
-      <div className="mt-6">
-        {activeTab === "tests" && (
-          <PlayerInsights
-            playerId={playerId}
-            isAdminMode={isAdminMode}
-            targetTestId={tabTargets.testId}
-          />
-        )}
-        {activeTab === "goals" && (
-          <PlayerGoals
-            playerId={playerId}
-            isAdminMode={isAdminMode}
-            targetGoalId={tabTargets.goalId}
-          />
-        )}
-        {activeTab === "sessions" && (
-          <PlayerSessions
-            playerId={playerId}
-            isAdminMode={isAdminMode}
-            targetSessionId={tabTargets.sessionId}
-          />
-        )}
-        {activeTab === "videos" && (
-          <PlayerVideos
-            playerId={playerId}
-            targetVideoId={tabTargets.videoId}
-            targetVideoMode={tabTargets.videoMode}
-          />
-        )}
-        {activeTab === "uploads" && (
-          <PlayerUploads playerId={playerId} targetUploadId={tabTargets.uploadId} />
-        )}
+        <div className="min-w-0">
+          {activeTab === "dashboard" && (
+            <PlayerDashboard playerId={playerId} onNavigate={handleTabClick} />
+          )}
+          {activeTab === "tests" && (
+            <>
+              <TabPageHeader
+                icon={BarChart2}
+                title="My Progress"
+                description="Test results and progressions tracked over time."
+              />
+              <PlayerInsights
+                playerId={playerId}
+                isAdminMode={isAdminMode}
+                targetTestId={tabTargets.testId}
+              />
+            </>
+          )}
+          {activeTab === "goals" && (
+            <>
+              <TabPageHeader
+                icon={Target}
+                title="Goals"
+                description="Your active training goals and milestones."
+              />
+              <PlayerGoals
+                playerId={playerId}
+                isAdminMode={isAdminMode}
+                targetGoalId={tabTargets.goalId}
+              />
+            </>
+          )}
+          {activeTab === "reports" && (
+            <>
+              <TabPageHeader
+                icon={FileText}
+                title="Feedback & Reports"
+                description="Training session notes added by Coach David."
+              />
+              <PlayerSessions playerId={playerId} />
+            </>
+          )}
+          {activeTab === "uploads" && (
+            <>
+              <TabPageHeader
+                icon={Upload}
+                title="Extra Help"
+                description="Send Coach David video clips for personalized feedback."
+              />
+              <PlayerUploads
+                playerId={playerId}
+                targetUploadId={tabTargets.uploadId}
+              />
+            </>
+          )}
+          {activeTab === "settings" && (
+            <>
+              <TabPageHeader
+                icon={Settings}
+                title="Settings"
+                description="Update your player's profile and basic info."
+              />
+              {settingsContent}
+            </>
+          )}
+        </div>
       </div>
     </section>
   );

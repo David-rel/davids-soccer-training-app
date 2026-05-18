@@ -59,12 +59,6 @@ export default async function AdminWaiversPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
-              href="/admin/videos"
-              className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300"
-            >
-              Videos
-            </Link>
-            <Link
               href="/admin"
               className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300"
             >

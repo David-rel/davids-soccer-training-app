@@ -275,10 +275,10 @@ export default function AdminParentClient(props: {
           </div>
           <div className="flex gap-2">
             <Link
-              href="/admin/private-sessions"
+              href="/admin"
               className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:border-emerald-300"
             >
-              Back to private sessions
+              Back to admin
             </Link>
             <button
               type="button"

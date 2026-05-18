@@ -5,20 +5,19 @@ export const dynamic = "force-dynamic";
 
 const sections = [
   {
-    title: "Private Sessions",
-    description:
-      "Manage parents, players, and jump into private player work.",
+    title: "Players",
+    description: "Search all players and open their full admin profile.",
+    href: "/admin/players",
+  },
+  {
+    title: "Accounts",
+    description: "Create parent accounts and link players from CRM.",
     href: "/admin/private-sessions",
   },
   {
-    title: "Group Sessions",
-    description: "View group sessions, signup counts, and profile-link status.",
+    title: "Group Training",
+    description: "Manage group sessions, signups, and scorecards.",
     href: "/admin/group-training",
-  },
-  {
-    title: "Videos",
-    description: "Add, edit, publish, and remove YouTube training videos.",
-    href: "/admin/videos",
   },
   {
     title: "Waivers",
@@ -26,9 +25,14 @@ const sections = [
     href: "/admin/waivers",
   },
   {
-    title: "Orders",
-    description: "Track all player shop purchases and SMS notification status.",
-    href: "/admin/orders",
+    title: "Challenges",
+    description: "Create challenges, manage submissions, and track player progress.",
+    href: "/admin/challenges",
+  },
+  {
+    title: "Training Requests",
+    description: "View all training time requests submitted by parents.",
+    href: "/admin/training-requests",
   },
 ];
 
@@ -49,7 +53,7 @@ export default function AdminPage() {
             <div>
               <div className="text-sm font-semibold text-emerald-50">Admin</div>
               <h1 className="mt-1 text-2xl font-semibold text-white sm:text-3xl">
-                Welcome to the admin. View things here:
+                Welcome to the admin.
               </h1>
             </div>
           </div>

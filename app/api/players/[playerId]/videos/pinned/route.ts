@@ -1,33 +1,24 @@
 import { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { sql } from "@/db";
+import { assertOwnsPlayer } from "@/lib/assertOwnsPlayer";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-async function assertOwnsPlayer(req: NextRequest, playerId: string) {
-  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
-  const parentId = token?.sub;
-  if (!parentId)
-    return {
-      ok: false as const,
-      res: new Response("Unauthorized", { status: 401 }),
-    };
-
-  const owns = (await sql`
-    SELECT 1
-    FROM players
-    WHERE id = ${playerId} AND parent_id = ${parentId}
-    LIMIT 1
-  `) as unknown as Array<{ "?column?": number }>;
-
-  if (owns.length === 0)
-    return {
-      ok: false as const,
-      res: new Response("Not found", { status: 404 }),
-    };
-  return { ok: true as const, parentId };
-}
+type PinnedVideoRow = {
+  id: string;
+  priority: number;
+  note: string | null;
+  created_at: string;
+  video_id: string;
+  title: string;
+  description: string | null;
+  video_url: string;
+  category: string | null;
+  thumbnail_url: string | null;
+  duration: string | null;
+  channel: string | null;
+};
 
 export async function GET(
   req: NextRequest,
@@ -39,7 +30,7 @@ export async function GET(
 
   try {
     // Get pinned videos with full video details
-    const pins = await sql`
+    const pins = (await sql`
       SELECT
         cvp.id, cvp.priority, cvp.note, cvp.created_at, cvp.video_id,
         v.id as video_id, v.title, v.description, v.video_url,
@@ -49,10 +40,10 @@ export async function GET(
       WHERE cvp.player_id = ${playerId}
         AND v.published = true
       ORDER BY cvp.priority DESC, cvp.created_at DESC
-    `;
+    `) as unknown as PinnedVideoRow[];
 
     // Transform to match expected structure with nested video object
-    const formattedPins = pins.map((pin: any) => ({
+    const formattedPins = pins.map((pin) => ({
       id: pin.id,
       priority: pin.priority,
       note: pin.note,

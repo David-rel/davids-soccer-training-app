@@ -26,7 +26,7 @@ export function PublicSiteHeader({ callbackUrl = "/players" }: Props) {
                 David’s Soccer Training
               </div>
               <h1 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
-                Group Sessions
+                Player Portal
               </h1>
             </div>
           </Link>

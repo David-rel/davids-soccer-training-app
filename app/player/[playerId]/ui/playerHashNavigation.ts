@@ -1,6 +1,13 @@
-export type PlayerTabType = "tests" | "goals" | "sessions" | "videos" | "uploads";
-export type PlayerSectionType = "tests" | "feedback";
-export type PlayerVideoMode = "pinned" | "recommendations" | "continue" | "browse";
+export type PlayerVideoMode = "recommendations" | "browse" | "continue" | "pinned";
+
+export type PlayerTabType =
+  | "tests"
+  | "goals"
+  | "reports"
+  | "uploads"
+  | "dashboard"
+  | "settings";
+export type PlayerSectionType = "tests" | "feedback" | "workspace";
 
 export type PlayerHashState = {
   section: PlayerSectionType | null;
@@ -8,10 +15,7 @@ export type PlayerHashState = {
   feedbackId: string | null;
   testId: string | null;
   goalId: string | null;
-  sessionId: string | null;
-  videoId: string | null;
   uploadId: string | null;
-  videoMode: PlayerVideoMode | null;
 };
 
 const DEFAULT_HASH_STATE: PlayerHashState = {
@@ -20,27 +24,22 @@ const DEFAULT_HASH_STATE: PlayerHashState = {
   feedbackId: null,
   testId: null,
   goalId: null,
-  sessionId: null,
-  videoId: null,
   uploadId: null,
-  videoMode: null,
 };
 
 const TAB_SET = new Set<PlayerTabType>([
   "tests",
   "goals",
-  "sessions",
-  "videos",
+  "reports",
   "uploads",
+  "dashboard",
+  "settings",
 ]);
 
-const SECTION_SET = new Set<PlayerSectionType>(["tests", "feedback"]);
-
-const VIDEO_MODE_SET = new Set<PlayerVideoMode>([
-  "pinned",
-  "recommendations",
-  "continue",
-  "browse",
+const SECTION_SET = new Set<PlayerSectionType>([
+  "tests",
+  "feedback",
+  "workspace",
 ]);
 
 function asPlayerTab(value: string | null | undefined): PlayerTabType | null {
@@ -61,14 +60,6 @@ function asPlayerSection(
     : null;
 }
 
-function asVideoMode(value: string | null | undefined): PlayerVideoMode | null {
-  if (!value) return null;
-  const normalized = value.trim().toLowerCase();
-  return VIDEO_MODE_SET.has(normalized as PlayerVideoMode)
-    ? (normalized as PlayerVideoMode)
-    : null;
-}
-
 function cleanId(value: string | null | undefined): string | null {
   if (!value) return null;
   const normalized = value.trim();
@@ -83,16 +74,33 @@ function parsePlainHashToken(token: string): Partial<PlayerHashState> {
   const normalized = normalizeToken(token);
 
   if (normalized === "tests") {
-    return { section: "tests", tab: "tests" };
+    return { section: "workspace", tab: "tests" };
   }
 
   if (normalized === "feedback") {
     return { section: "feedback" };
   }
 
+  if (
+    normalized === "training-goals" ||
+    normalized === "traininggoals"
+  ) {
+    return { section: "workspace", tab: "goals" };
+  }
+
+  if (
+    normalized === "online-extra-help" ||
+    normalized === "onlineextrahelp" ||
+    normalized === "extra-help" ||
+    normalized === "extrahelp" ||
+    normalized === "content-upload"
+  ) {
+    return { section: "workspace", tab: "uploads" };
+  }
+
   const asTab = asPlayerTab(normalized);
   if (asTab) {
-    return { section: "tests", tab: asTab };
+    return { section: "workspace", tab: asTab };
   }
 
   if (
@@ -110,7 +118,7 @@ function parsePlainHashToken(token: string): Partial<PlayerHashState> {
     normalized.startsWith("tests/")
   ) {
     const testId = cleanId(token.replace(/^[^:/]+[:/]/, ""));
-    return testId ? { section: "tests", tab: "tests", testId } : {};
+    return testId ? { section: "workspace", tab: "tests", testId } : {};
   }
 
   if (
@@ -120,27 +128,7 @@ function parsePlainHashToken(token: string): Partial<PlayerHashState> {
     normalized.startsWith("goals/")
   ) {
     const goalId = cleanId(token.replace(/^[^:/]+[:/]/, ""));
-    return goalId ? { section: "tests", tab: "goals", goalId } : {};
-  }
-
-  if (
-    normalized.startsWith("session:") ||
-    normalized.startsWith("session/") ||
-    normalized.startsWith("sessions:") ||
-    normalized.startsWith("sessions/")
-  ) {
-    const sessionId = cleanId(token.replace(/^[^:/]+[:/]/, ""));
-    return sessionId ? { section: "tests", tab: "sessions", sessionId } : {};
-  }
-
-  if (
-    normalized.startsWith("video:") ||
-    normalized.startsWith("video/") ||
-    normalized.startsWith("videos:") ||
-    normalized.startsWith("videos/")
-  ) {
-    const videoId = cleanId(token.replace(/^[^:/]+[:/]/, ""));
-    return videoId ? { section: "tests", tab: "videos", videoId } : {};
+    return goalId ? { section: "workspace", tab: "goals", goalId } : {};
   }
 
   if (
@@ -150,7 +138,7 @@ function parsePlainHashToken(token: string): Partial<PlayerHashState> {
     normalized.startsWith("uploads/")
   ) {
     const uploadId = cleanId(token.replace(/^[^:/]+[:/]/, ""));
-    return uploadId ? { section: "tests", tab: "uploads", uploadId } : {};
+    return uploadId ? { section: "workspace", tab: "uploads", uploadId } : {};
   }
 
   return {};
@@ -190,25 +178,14 @@ export function parsePlayerHash(rawHash: string): PlayerHashState {
 
   state.testId = cleanId(params.get("testId")) ?? cleanId(params.get("test"));
   state.goalId = cleanId(params.get("goalId")) ?? cleanId(params.get("goal"));
-  state.sessionId =
-    cleanId(params.get("sessionId")) ?? cleanId(params.get("session"));
-  state.videoId = cleanId(params.get("videoId")) ?? cleanId(params.get("video"));
   state.uploadId =
     cleanId(params.get("uploadId")) ?? cleanId(params.get("upload"));
-
-  state.videoMode =
-    asVideoMode(params.get("videoMode")) ??
-    asVideoMode(params.get("mode")) ??
-    asVideoMode(params.get("videoTab"));
 
   if (genericId) {
     const genericTab =
       asPlayerTab(params.get("tab")) ?? asPlayerTab(params.get("content"));
     if (genericTab === "tests" && !state.testId) state.testId = genericId;
     if (genericTab === "goals" && !state.goalId) state.goalId = genericId;
-    if (genericTab === "sessions" && !state.sessionId)
-      state.sessionId = genericId;
-    if (genericTab === "videos" && !state.videoId) state.videoId = genericId;
     if (genericTab === "uploads" && !state.uploadId)
       state.uploadId = genericId;
   }
@@ -220,14 +197,12 @@ function finalizeHashState(state: PlayerHashState): PlayerHashState {
   if (!state.tab) {
     if (state.testId) state.tab = "tests";
     else if (state.goalId) state.tab = "goals";
-    else if (state.sessionId) state.tab = "sessions";
-    else if (state.videoId || state.videoMode) state.tab = "videos";
     else if (state.uploadId) state.tab = "uploads";
   }
 
   if (!state.section) {
     if (state.feedbackId) state.section = "feedback";
-    else if (state.tab) state.section = "tests";
+    else if (state.tab) state.section = "workspace";
   }
 
   return state;
@@ -254,10 +229,7 @@ export function updatePlayerHash(
   if (nextState.feedbackId) params.set("feedbackId", nextState.feedbackId);
   if (nextState.testId) params.set("testId", nextState.testId);
   if (nextState.goalId) params.set("goalId", nextState.goalId);
-  if (nextState.sessionId) params.set("sessionId", nextState.sessionId);
-  if (nextState.videoId) params.set("videoId", nextState.videoId);
   if (nextState.uploadId) params.set("uploadId", nextState.uploadId);
-  if (nextState.videoMode) params.set("videoMode", nextState.videoMode);
 
   const nextHash = params.toString();
   const currentHash = window.location.hash.startsWith("#")

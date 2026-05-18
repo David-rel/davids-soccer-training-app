@@ -1,9 +1,10 @@
-import AdminPreviewClient from "./ui/AdminPreviewClient";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminPreviewPage(props: {
+export default async function AdminPreviewPage(props: {
   params: Promise<{ playerId: string }>;
 }) {
-  return <AdminPreviewClient params={props.params} />;
+  const { playerId } = await props.params;
+  redirect(`/player/${playerId}`);
 }

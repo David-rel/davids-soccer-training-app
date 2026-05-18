@@ -3,7 +3,7 @@
 import { signOut } from "next-auth/react";
 import { useTransition } from "react";
 
-export function SignOutButton() {
+export function SignOutButton({ className }: { className?: string }) {
   const [isPending, startTransition] = useTransition();
 
   return (
@@ -11,7 +11,10 @@ export function SignOutButton() {
       type="button"
       onClick={() => startTransition(() => signOut({ callbackUrl: "/" }))}
       disabled={isPending}
-      className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-70"
+      className={
+        className ??
+        "rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-70"
+      }
     >
       {isPending ? "Signing out…" : "Sign out"}
     </button>

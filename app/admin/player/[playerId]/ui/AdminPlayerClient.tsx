@@ -4,9 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { TEST_DEFINITIONS } from "@/lib/testDefinitions";
-import { FeedbackMarkdown } from "@/app/ui/FeedbackMarkdown";
-import { formatFeedbackTitleForDisplay } from "@/lib/feedbackTitle";
-import { PinnedVideos } from "./PinnedVideos";
 import { ContentSubmissionsSection } from "./ContentSubmissionsSection";
 
 type Player = {
@@ -62,34 +59,36 @@ type PlayerProfile = {
   updated_at: string;
 };
 
-type PlayerGoal = {
+type CoachingReport = {
   id: string;
   player_id: string;
-  name: string;
-  due_date: string | null; // YYYY-MM-DD
-  completed: boolean;
-  completed_at: string | null;
-  set_by: "parent" | "coach";
+  type: "baseline" | "progress" | "blurb";
+  title: string;
+  report_date: string;
+  content: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 };
 
-type PlayerSession = {
+type GoalStep = {
+  id: string;
+  period_goal_id: string;
+  title: string;
+  description: string | null;
+  target_date: string | null;
+  completed: boolean;
+  completed_at: string | null;
+  sort_order: number;
+};
+
+type PeriodGoal = {
   id: string;
   player_id: string;
-  session_date: string; // YYYY-MM-DD
   title: string;
-  document_upload_url: string | null;
-  session_plan: string | null;
-  focus_areas: string | null;
-  activities: string | null;
-  things_to_try: string | null;
-  notes: string | null;
-  admin_notes: string | null;
-  published: boolean;
-  published_at: string | null;
-  created_at: string;
-  updated_at: string;
+  description: string | null;
+  start_date: string;
+  end_date: string;
+  steps: GoalStep[];
 };
 
 type PlayerVideoUpload = {
@@ -106,56 +105,19 @@ type PlayerVideoUpload = {
   updated_at: string;
 };
 
-type PlayerFeedback = {
+type CallRequest = {
   id: string;
-  player_id: string | null;
-  title: string;
-  raw_content: string;
-  cleaned_markdown_content: string | null;
-  public: boolean;
+  player_id: string;
+  parent_id: string;
+  duration_minutes: number;
+  availability: string;
+  notes: string | null;
+  status: "pending" | "seen";
+  seen_at: string | null;
+  parent_email: string;
+  parent_phone: string | null;
   created_at: string;
-  updated_at: string;
 };
-
-type ChecklistStep = "feedback" | "development" | "skills" | "goals";
-type ChecklistStatus = Record<ChecklistStep, boolean>;
-
-const INITIAL_CHECKLIST_STATUS: ChecklistStatus = {
-  feedback: false,
-  development: false,
-  skills: false,
-  goals: false,
-};
-
-const DEVELOPMENT_NOTE_FIELDS = [
-  "strengths",
-  "focus_areas",
-  "long_term_development_notes",
-] as const;
-
-const SKILL_FIELDS = [
-  "first_touch_rating",
-  "first_touch_notes",
-  "one_v_one_ability_rating",
-  "one_v_one_ability_notes",
-  "passing_technique_rating",
-  "passing_technique_notes",
-  "shot_technique_rating",
-  "shot_technique_notes",
-  "vision_recognition_rating",
-  "vision_recognition_notes",
-  "great_soccer_habits_rating",
-  "great_soccer_habits_notes",
-] as const;
-
-function hasFieldChanges<K extends keyof Player>(
-  original: Player | null,
-  next: Player | null,
-  fields: readonly K[],
-) {
-  if (!original || !next) return false;
-  return fields.some((field) => (original[field] ?? null) !== (next[field] ?? null));
-}
 
 async function api<T>(
   path: string,
@@ -333,11 +295,34 @@ export default function AdminPlayerClient(props: {
 
   // Testing evaluations
   const [tests, setTests] = useState<PlayerTest[]>([]);
-  const [goals, setGoals] = useState<PlayerGoal[]>([]);
-  const [newGoalName, setNewGoalName] = useState("");
-  const [newGoalDueDate, setNewGoalDueDate] = useState<string>("");
-  const [goalDrafts, setGoalDrafts] = useState<
-    Record<string, { name: string; due_date: string }>
+
+  // Period goals state
+  const [periodGoals, setPeriodGoals] = useState<PeriodGoal[]>([]);
+  const [newPGTitle, setNewPGTitle] = useState("");
+  const [newPGDescription, setNewPGDescription] = useState("");
+  const [newPGStartDate, setNewPGStartDate] = useState("");
+  const [newPGEndDate, setNewPGEndDate] = useState("");
+  const [pgDrafts, setPgDrafts] = useState<
+    Record<string, { title: string; description: string; start_date: string; end_date: string }>
+  >({});
+  const [pgExpanded, setPgExpanded] = useState<Record<string, boolean>>({});
+  const [newStepDrafts, setNewStepDrafts] = useState<
+    Record<string, { title: string; description: string; target_date: string; sort_order: string }>
+  >({});
+  const [stepEditDrafts, setStepEditDrafts] = useState<
+    Record<string, { title: string; description: string; target_date: string; sort_order: string }>
+  >({});
+  const [editingStepId, setEditingStepId] = useState<string | null>(null);
+
+  // Coaching reports state
+  const [coachingReports, setCoachingReports] = useState<CoachingReport[]>([]);
+  const [crExpanded, setCrExpanded] = useState<Record<string, boolean>>({});
+  const [crNewType, setCrNewType] = useState<"baseline" | "progress" | "blurb">("blurb");
+  const [crNewTitle, setCrNewTitle] = useState("");
+  const [crNewDate, setCrNewDate] = useState(new Date().toISOString().slice(0, 10));
+  const [crNewContent, setCrNewContent] = useState<Record<string, unknown>>({});
+  const [crEditDrafts, setCrEditDrafts] = useState<
+    Record<string, { title: string; report_date: string; content: Record<string, unknown> }>
   >({});
   const [testName, setTestName] = useState<string>(
     TEST_DEFINITIONS[0]?.name ?? "",
@@ -358,87 +343,22 @@ export default function AdminPlayerClient(props: {
 
   const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
 
-  // Training sessions
-  const [sessions, setSessions] = useState<PlayerSession[]>([]);
+  const [callRequests, setCallRequests] = useState<CallRequest[]>([]);
+
   const [contentSubmissions, setContentSubmissions] = useState<
     PlayerVideoUpload[]
   >([]);
-  const [feedbackEntries, setFeedbackEntries] = useState<PlayerFeedback[]>([]);
-  const [selectedFeedbackId, setSelectedFeedbackId] = useState<string | null>(
-    null,
-  );
-  const [newFeedbackRawContent, setNewFeedbackRawContent] = useState("");
-  const [creatingFeedback, setCreatingFeedback] = useState(false);
-  const [deletingFeedbackId, setDeletingFeedbackId] = useState<string | null>(
-    null,
-  );
-  const [recleaningFeedbackId, setRecleaningFeedbackId] = useState<
-    string | null
-  >(null);
-  const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(
-    new Set(),
-  );
-  const [newSessionTitle, setNewSessionTitle] = useState("");
-  const [newSessionDate, setNewSessionDate] = useState("");
-  const [newSessionPlan, setNewSessionPlan] = useState("");
-  const [newSessionFocus, setNewSessionFocus] = useState("");
-  const [newSessionActivities, setNewSessionActivities] = useState("");
-  const [newSessionThingsToTry, setNewSessionThingsToTry] = useState("");
-  const [newSessionNotes, setNewSessionNotes] = useState("");
-  const [newSessionAdminNotes, setNewSessionAdminNotes] = useState("");
-  const [newSessionDocumentUrl, setNewSessionDocumentUrl] = useState("");
-  const [newSessionUploadingDocument, setNewSessionUploadingDocument] =
-    useState(false);
-  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
-  const [editSessionTitle, setEditSessionTitle] = useState("");
-  const [editSessionDate, setEditSessionDate] = useState("");
-  const [editSessionPlan, setEditSessionPlan] = useState("");
-  const [editSessionFocus, setEditSessionFocus] = useState("");
-  const [editSessionActivities, setEditSessionActivities] = useState("");
-  const [editSessionThingsToTry, setEditSessionThingsToTry] = useState("");
-  const [editSessionNotes, setEditSessionNotes] = useState("");
-  const [editSessionAdminNotes, setEditSessionAdminNotes] = useState("");
-  const [editSessionDocumentUrl, setEditSessionDocumentUrl] = useState("");
-  const [editSessionUploadingDocument, setEditSessionUploadingDocument] =
-    useState(false);
-  const [editSessionPublished, setEditSessionPublished] = useState(false);
-  const [showEndSessionChecklist, setShowEndSessionChecklist] = useState(false);
-  const [checklistStatus, setChecklistStatus] = useState<ChecklistStatus>(
-    INITIAL_CHECKLIST_STATUS,
-  );
-  const [savingDevelopmentNotes, setSavingDevelopmentNotes] = useState(false);
-  const [savingGeneralSkills, setSavingGeneralSkills] = useState(false);
-  const [autoRefreshingNotes, setAutoRefreshingNotes] = useState(false);
-  const [autoRefreshWithGoals, setAutoRefreshWithGoals] = useState(false);
 
   const computed = useMemo(
     () => calcBirthMeta(draft?.birthdate ?? null),
     [draft?.birthdate],
   );
 
-  const autoNotesMeta = useMemo(() => {
-    const raw = draft?.notes_last_auto_refresh_at;
-    if (!raw) return { stale: false, label: "Never" };
-    const date = new Date(raw);
-    if (Number.isNaN(date.getTime())) {
-      return { stale: false, label: "Never" };
-    }
-    const now = new Date();
-    const ageMs = now.getTime() - date.getTime();
-    const stale = ageMs >= 14 * 24 * 60 * 60 * 1000;
-    return {
-      stale,
-      label: date.toLocaleDateString(),
-    };
-  }, [draft?.notes_last_auto_refresh_at]);
-
   useEffect(() => {
     setPlayer(null);
     setDraft(null);
     setMsg(null);
     setErrMsg(null);
-    setShowEndSessionChecklist(false);
-    setChecklistStatus(INITIAL_CHECKLIST_STATUS);
     props.params.then(({ playerId }) => setPlayerId(playerId));
   }, [props.params]);
 
@@ -450,10 +370,10 @@ export default function AdminPlayerClient(props: {
         await loadPlayer(securityCode, playerId);
         await loadTests(securityCode, playerId);
         await loadProfiles(securityCode, playerId);
-        await loadGoals(securityCode, playerId);
-        await loadSessions(securityCode, playerId);
+        await loadPeriodGoals(securityCode, playerId);
+        await loadCoachingReports(securityCode, playerId);
         await loadContentSubmissions(securityCode, playerId);
-        await loadFeedback(securityCode, playerId);
+        await loadCallRequests(securityCode, playerId);
       } catch (e) {
         setErrMsg(e instanceof Error ? e.message : "Failed to load data.");
       }
@@ -497,79 +417,210 @@ export default function AdminPlayerClient(props: {
     setProfiles(data.profiles);
   }
 
-  async function loadGoals(code: string, id: string) {
-    const data = await api<{ goals: PlayerGoal[] }>(
-      `/api/admin/players/${id}/goals`,
+  async function loadPeriodGoals(code: string, id: string) {
+    const data = await api<{ goals: PeriodGoal[] }>(
+      `/api/admin/players/${id}/period-goals`,
       { method: "GET", securityCode: code },
     );
-    setGoals(data.goals ?? []);
-    setGoalDrafts((prev) => {
+    const list = data.goals ?? [];
+    setPeriodGoals(list);
+    setPgDrafts((prev) => {
       const next = { ...prev };
-      for (const g of data.goals ?? []) {
+      for (const g of list) {
         if (!next[g.id]) {
-          next[g.id] = { name: g.name, due_date: g.due_date ?? "" };
+          next[g.id] = {
+            title: g.title,
+            description: g.description ?? "",
+            start_date: g.start_date,
+            end_date: g.end_date,
+          };
+        }
+      }
+      return next;
+    });
+    setNewStepDrafts((prev) => {
+      const next = { ...prev };
+      for (const g of list) {
+        if (!next[g.id]) {
+          next[g.id] = { title: "", description: "", target_date: "", sort_order: "0" };
         }
       }
       return next;
     });
   }
 
-  async function createGoal(code: string, id: string) {
-    const name = newGoalName.trim();
-    if (!name) {
-      setErrMsg("Goal name is required.");
-      return;
-    }
-    const due = newGoalDueDate.trim();
-    // Validate date format if provided
-    if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) {
-      setErrMsg("Date must be in YYYY-MM-DD format.");
-      return;
-    }
-    await api<{ goal: PlayerGoal }>(`/api/admin/players/${id}/goals`, {
+  async function createPeriodGoal(code: string, id: string) {
+    const title = newPGTitle.trim();
+    if (!title) { setErrMsg("Title is required."); return; }
+    if (!newPGStartDate || !newPGEndDate) { setErrMsg("Start and end dates are required."); return; }
+    await api<{ goal: PeriodGoal }>(`/api/admin/players/${id}/period-goals`, {
       method: "POST",
       securityCode: code,
-      body: JSON.stringify({ name, due_date: due || null }),
+      body: JSON.stringify({
+        title,
+        description: newPGDescription.trim() || null,
+        start_date: newPGStartDate,
+        end_date: newPGEndDate,
+      }),
     });
-    setNewGoalName("");
-    setNewGoalDueDate("");
-    await loadGoals(code, id);
-    markChecklistStepDone("goals");
+    setNewPGTitle("");
+    setNewPGDescription("");
+    setNewPGStartDate("");
+    setNewPGEndDate("");
+    await loadPeriodGoals(code, id);
   }
 
-  async function saveGoal(
-    code: string,
-    playerId: string,
-    goalId: string,
-    patch: Partial<Pick<PlayerGoal, "name" | "due_date" | "completed">>,
-  ) {
-    await api<{ goal: PlayerGoal }>(
-      `/api/admin/players/${playerId}/goals/${goalId}`,
+  async function savePeriodGoal(code: string, pid: string, goalId: string) {
+    const d = pgDrafts[goalId];
+    if (!d) return;
+    const title = d.title.trim();
+    if (!title) { setErrMsg("Title is required."); return; }
+    await api<{ goal: PeriodGoal }>(
+      `/api/admin/players/${pid}/period-goals/${goalId}`,
       {
         method: "PATCH",
         securityCode: code,
-        body: JSON.stringify(patch),
+        body: JSON.stringify({
+          title,
+          description: d.description.trim() || null,
+          start_date: d.start_date,
+          end_date: d.end_date,
+        }),
       },
     );
-    await loadGoals(code, playerId);
-    markChecklistStepDone("goals");
+    await loadPeriodGoals(code, pid);
   }
 
-  async function deleteGoal(code: string, playerId: string, goalId: string) {
-    await api<{ ok: true }>(`/api/admin/players/${playerId}/goals/${goalId}`, {
-      method: "DELETE",
-      securityCode: code,
-    });
-    await loadGoals(code, playerId);
-    markChecklistStepDone("goals");
+  async function deletePeriodGoal(code: string, pid: string, goalId: string) {
+    await api<Record<string, never>>(
+      `/api/admin/players/${pid}/period-goals/${goalId}`,
+      { method: "DELETE", securityCode: code },
+    );
+    await loadPeriodGoals(code, pid);
   }
 
-  async function loadSessions(code: string, id: string) {
-    const data = await api<{ sessions: PlayerSession[] }>(
-      `/api/admin/players/${id}/sessions`,
+  async function createStep(code: string, pid: string, goalId: string) {
+    const sd = newStepDrafts[goalId];
+    if (!sd) return;
+    const title = sd.title.trim();
+    if (!title) { setErrMsg("Step title is required."); return; }
+    await api<{ step: GoalStep }>(
+      `/api/admin/players/${pid}/period-goals/${goalId}/steps`,
+      {
+        method: "POST",
+        securityCode: code,
+        body: JSON.stringify({
+          title,
+          description: sd.description.trim() || null,
+          target_date: sd.target_date || null,
+          sort_order: Number(sd.sort_order) || 0,
+        }),
+      },
+    );
+    setNewStepDrafts((prev) => ({
+      ...prev,
+      [goalId]: { title: "", description: "", target_date: "", sort_order: "0" },
+    }));
+    await loadPeriodGoals(code, pid);
+  }
+
+  async function saveStep(
+    code: string,
+    pid: string,
+    goalId: string,
+    step: GoalStep,
+    patch: Partial<Pick<GoalStep, "title" | "description" | "target_date" | "sort_order" | "completed">>,
+  ) {
+    await api<{ step: GoalStep }>(
+      `/api/admin/players/${pid}/period-goals/${goalId}/steps/${step.id}`,
+      {
+        method: "PATCH",
+        securityCode: code,
+        body: JSON.stringify({
+          title: patch.title ?? step.title,
+          description: patch.description !== undefined ? patch.description : step.description,
+          target_date: patch.target_date !== undefined ? patch.target_date : step.target_date,
+          sort_order: patch.sort_order !== undefined ? patch.sort_order : step.sort_order,
+          completed: patch.completed !== undefined ? patch.completed : step.completed,
+        }),
+      },
+    );
+    await loadPeriodGoals(code, pid);
+  }
+
+  async function deleteStep(code: string, pid: string, goalId: string, stepId: string) {
+    await api<Record<string, never>>(
+      `/api/admin/players/${pid}/period-goals/${goalId}/steps/${stepId}`,
+      { method: "DELETE", securityCode: code },
+    );
+    await loadPeriodGoals(code, pid);
+  }
+
+  async function loadCoachingReports(code: string, id: string) {
+    const data = await api<{ reports: CoachingReport[] }>(
+      `/api/admin/players/${id}/coaching-reports`,
       { method: "GET", securityCode: code },
     );
-    setSessions(data.sessions ?? []);
+    const list = data.reports ?? [];
+    setCoachingReports(list);
+    setCrEditDrafts((prev) => {
+      const next = { ...prev };
+      for (const r of list) {
+        if (!next[r.id]) {
+          next[r.id] = { title: r.title, report_date: r.report_date, content: r.content };
+        }
+      }
+      return next;
+    });
+  }
+
+  async function createCoachingReport(code: string, pid: string) {
+    const title = crNewTitle.trim();
+    if (!title) { setErrMsg("Title is required."); return; }
+    await api<{ report: CoachingReport }>(
+      `/api/admin/players/${pid}/coaching-reports`,
+      {
+        method: "POST",
+        securityCode: code,
+        body: JSON.stringify({ type: crNewType, title, report_date: crNewDate, content: crNewContent }),
+      },
+    );
+    setCrNewTitle("");
+    setCrNewDate(new Date().toISOString().slice(0, 10));
+    setCrNewContent({});
+    await loadCoachingReports(code, pid);
+  }
+
+  async function saveCoachingReport(code: string, pid: string, reportId: string) {
+    const d = crEditDrafts[reportId];
+    if (!d) return;
+    const title = d.title.trim();
+    if (!title) { setErrMsg("Title is required."); return; }
+    await api<{ report: CoachingReport }>(
+      `/api/admin/players/${pid}/coaching-reports/${reportId}`,
+      {
+        method: "PATCH",
+        securityCode: code,
+        body: JSON.stringify({ title, report_date: d.report_date, content: d.content }),
+      },
+    );
+    await loadCoachingReports(code, pid);
+  }
+
+  async function deleteCoachingReport(code: string, pid: string, reportId: string) {
+    await api<Record<string, never>>(
+      `/api/admin/players/${pid}/coaching-reports/${reportId}`,
+      { method: "DELETE", securityCode: code },
+    );
+    await loadCoachingReports(code, pid);
+  }
+
+  async function loadCallRequests(code: string, id: string) {
+    const data = await api<{ requests: CallRequest[] }>(
+      `/api/admin/players/${id}/call-requests`,
+      { method: "GET", securityCode: code },
+    );
+    setCallRequests(data.requests ?? []);
   }
 
   async function loadContentSubmissions(code: string, id: string) {
@@ -578,261 +629,6 @@ export default function AdminPlayerClient(props: {
       { method: "GET", securityCode: code },
     );
     setContentSubmissions(data.uploads ?? []);
-  }
-
-  async function loadFeedback(code: string, id: string) {
-    const data = await api<{ feedback: PlayerFeedback[] }>(
-      `/api/admin/players/${id}/feedback`,
-      { method: "GET", securityCode: code },
-    );
-    const next = data.feedback ?? [];
-    setFeedbackEntries(next);
-    setSelectedFeedbackId((prev) => {
-      if (prev && next.some((item) => item.id === prev)) return prev;
-      return next[0]?.id ?? null;
-    });
-  }
-
-  async function createFeedback(code: string, id: string) {
-    const rawContent = newFeedbackRawContent.trim();
-    if (!rawContent) {
-      setErrMsg("Raw feedback is required.");
-      return;
-    }
-
-    setCreatingFeedback(true);
-    try {
-      const data = await api<{ feedback: PlayerFeedback }>(
-        `/api/admin/players/${id}/feedback`,
-        {
-          method: "POST",
-          securityCode: code,
-          body: JSON.stringify({
-            raw_content: rawContent,
-            public: true,
-          }),
-        },
-      );
-      setNewFeedbackRawContent("");
-      await loadFeedback(code, id);
-      setSelectedFeedbackId(data.feedback.id);
-      markChecklistStepDone("feedback");
-      setMsg("Feedback created.");
-      scrollToSection("end-session-development-section");
-    } finally {
-      setCreatingFeedback(false);
-    }
-  }
-
-  async function deleteFeedback(code: string, id: string, feedbackId: string) {
-    setDeletingFeedbackId(feedbackId);
-    try {
-      await api<{ ok: true }>(
-        `/api/admin/players/${id}/feedback/${feedbackId}`,
-        {
-          method: "DELETE",
-          securityCode: code,
-        },
-      );
-      await loadFeedback(code, id);
-      setMsg("Feedback deleted.");
-    } finally {
-      setDeletingFeedbackId(null);
-    }
-  }
-
-  async function recleanFeedback(code: string, id: string, feedbackId: string) {
-    setRecleaningFeedbackId(feedbackId);
-    try {
-      await api<{ feedback: PlayerFeedback }>(
-        `/api/admin/players/${id}/feedback/${feedbackId}`,
-        {
-          method: "PATCH",
-          securityCode: code,
-        },
-      );
-      await loadFeedback(code, id);
-      setSelectedFeedbackId(feedbackId);
-      setMsg("Feedback re-cleaned.");
-    } finally {
-      setRecleaningFeedbackId(null);
-    }
-  }
-
-  async function createSession(code: string, id: string) {
-    const title = newSessionTitle.trim();
-    if (!title) {
-      setErrMsg("Session title is required.");
-      return;
-    }
-    const date = newSessionDate.trim();
-    if (!date) {
-      setErrMsg("Session date is required.");
-      return;
-    }
-    await api<{ session: PlayerSession }>(`/api/admin/players/${id}/sessions`, {
-      method: "POST",
-      securityCode: code,
-      body: JSON.stringify({
-        title,
-        session_date: date,
-        document_upload_url: newSessionDocumentUrl || null,
-        session_plan: newSessionPlan.trim() || null,
-        focus_areas: newSessionFocus.trim() || null,
-        activities: newSessionActivities.trim() || null,
-        things_to_try: newSessionThingsToTry.trim() || null,
-        notes: newSessionNotes.trim() || null,
-        admin_notes: newSessionAdminNotes.trim() || null,
-      }),
-    });
-    setNewSessionTitle("");
-    setNewSessionDate("");
-    setNewSessionPlan("");
-    setNewSessionFocus("");
-    setNewSessionActivities("");
-    setNewSessionThingsToTry("");
-    setNewSessionNotes("");
-    setNewSessionAdminNotes("");
-    setNewSessionDocumentUrl("");
-    await loadSessions(code, id);
-  }
-
-  async function saveSession(
-    code: string,
-    playerId: string,
-    sessionId: string,
-  ) {
-    await api<{ session: PlayerSession }>(
-      `/api/admin/players/${playerId}/sessions/${sessionId}`,
-      {
-        method: "PATCH",
-        securityCode: code,
-        body: JSON.stringify({
-          title: editSessionTitle,
-          session_date: editSessionDate,
-          document_upload_url: editSessionDocumentUrl || null,
-          session_plan: editSessionPlan.trim() || null,
-          focus_areas: editSessionFocus.trim() || null,
-          activities: editSessionActivities.trim() || null,
-          things_to_try: editSessionThingsToTry.trim() || null,
-          notes: editSessionNotes.trim() || null,
-          admin_notes: editSessionAdminNotes.trim() || null,
-          published: editSessionPublished,
-        }),
-      },
-    );
-    setEditingSessionId(null);
-    await loadSessions(code, playerId);
-  }
-
-  async function deleteSession(
-    code: string,
-    playerId: string,
-    sessionId: string,
-  ) {
-    await api<{ ok: true }>(
-      `/api/admin/players/${playerId}/sessions/${sessionId}`,
-      {
-        method: "DELETE",
-        securityCode: code,
-      },
-    );
-    await loadSessions(code, playerId);
-  }
-
-  async function togglePublishSession(
-    code: string,
-    playerId: string,
-    sessionId: string,
-    currentPublished: boolean,
-  ) {
-    const session = sessions.find((s) => s.id === sessionId);
-    if (!session) return;
-
-    // Toggle published status
-    setEditSessionPublished(!currentPublished);
-    setEditSessionTitle(session.title);
-    setEditSessionDate(session.session_date);
-    setEditSessionPlan(session.session_plan ?? "");
-    setEditSessionFocus(session.focus_areas ?? "");
-    setEditSessionActivities(session.activities ?? "");
-    setEditSessionThingsToTry(session.things_to_try ?? "");
-    setEditSessionNotes(session.notes ?? "");
-    setEditSessionAdminNotes(session.admin_notes ?? "");
-    setEditSessionDocumentUrl(session.document_upload_url ?? "");
-    setEditSessionPublished(!currentPublished);
-
-    await api<{ session: PlayerSession }>(
-      `/api/admin/players/${playerId}/sessions/${sessionId}`,
-      {
-        method: "PATCH",
-        securityCode: code,
-        body: JSON.stringify({
-          title: session.title,
-          session_date: session.session_date,
-          document_upload_url: session.document_upload_url,
-          session_plan: session.session_plan,
-          focus_areas: session.focus_areas,
-          activities: session.activities,
-          things_to_try: session.things_to_try,
-          notes: session.notes,
-          admin_notes: session.admin_notes,
-          published: !currentPublished,
-        }),
-      },
-    );
-    await loadSessions(code, playerId);
-  }
-
-  async function uploadSessionDocument(
-    file: File,
-    mode: "new" | "edit",
-  ): Promise<void> {
-    if (
-      file.type !== "application/pdf" &&
-      !file.name.toLowerCase().endsWith(".pdf")
-    ) {
-      setErrMsg("Please upload a PDF file.");
-      return;
-    }
-
-    setErrMsg(null);
-    if (mode === "new") {
-      setNewSessionUploadingDocument(true);
-    } else {
-      setEditSessionUploadingDocument(true);
-    }
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await fetch("/api/blob/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || "Failed to upload PDF.");
-      }
-
-      const data = (await res.json()) as { url: string };
-      if (mode === "new") {
-        setNewSessionDocumentUrl(data.url);
-      } else {
-        setEditSessionDocumentUrl(data.url);
-      }
-      setMsg("PDF uploaded.");
-    } catch (e) {
-      setErrMsg(e instanceof Error ? e.message : "Failed to upload PDF.");
-    } finally {
-      if (mode === "new") {
-        setNewSessionUploadingDocument(false);
-      } else {
-        setEditSessionUploadingDocument(false);
-      }
-    }
   }
 
   const [editingTestId, setEditingTestId] = useState<string | null>(null);
@@ -1053,154 +849,10 @@ export default function AdminPlayerClient(props: {
     setMsg("Profile deleted.");
   }
 
-  function markChecklistStepDone(step: ChecklistStep) {
-    setChecklistStatus((prev) => ({ ...prev, [step]: true }));
-  }
-
-  function toggleChecklistStep(step: ChecklistStep) {
-    setChecklistStatus((prev) => ({ ...prev, [step]: !prev[step] }));
-  }
-
-  function scrollToSection(id: string) {
-    const element = document.getElementById(id);
-    if (!element) return;
-    element.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  function openEndSessionChecklist() {
-    setShowEndSessionChecklist(true);
-    setTimeout(() => scrollToSection("end-session-checklist"), 0);
-  }
-
-  async function saveDevelopmentNotes() {
-    if (!playerId || !draft) return;
-    setMsg(null);
-    setErrMsg(null);
-    setSavingDevelopmentNotes(true);
-    try {
-      const data = await api<{ player: Player }>(`/api/admin/players/${playerId}`, {
-        method: "PATCH",
-        securityCode,
-        body: JSON.stringify({
-          strengths: draft.strengths,
-          focus_areas: draft.focus_areas,
-          long_term_development_notes: draft.long_term_development_notes,
-        }),
-      });
-      setPlayer(data.player);
-      setDraft(data.player);
-      markChecklistStepDone("development");
-      setMsg("Development notes saved.");
-      scrollToSection("end-session-skills-section");
-    } catch (e) {
-      setErrMsg(
-        e instanceof Error ? e.message : "Failed to save development notes.",
-      );
-    } finally {
-      setSavingDevelopmentNotes(false);
-    }
-  }
-
-  async function saveGeneralSkills() {
-    if (!playerId || !draft) return;
-    setMsg(null);
-    setErrMsg(null);
-    setSavingGeneralSkills(true);
-    try {
-      const data = await api<{ player: Player }>(`/api/admin/players/${playerId}`, {
-        method: "PATCH",
-        securityCode,
-        body: JSON.stringify({
-          first_touch_rating: draft.first_touch_rating,
-          first_touch_notes: draft.first_touch_notes,
-          one_v_one_ability_rating: draft.one_v_one_ability_rating,
-          one_v_one_ability_notes: draft.one_v_one_ability_notes,
-          passing_technique_rating: draft.passing_technique_rating,
-          passing_technique_notes: draft.passing_technique_notes,
-          shot_technique_rating: draft.shot_technique_rating,
-          shot_technique_notes: draft.shot_technique_notes,
-          vision_recognition_rating: draft.vision_recognition_rating,
-          vision_recognition_notes: draft.vision_recognition_notes,
-          great_soccer_habits_rating: draft.great_soccer_habits_rating,
-          great_soccer_habits_notes: draft.great_soccer_habits_notes,
-        }),
-      });
-      setPlayer(data.player);
-      setDraft(data.player);
-      markChecklistStepDone("skills");
-      setMsg("General soccer skills saved.");
-      scrollToSection("end-session-goals-section");
-    } catch (e) {
-      setErrMsg(
-        e instanceof Error ? e.message : "Failed to save general soccer skills.",
-      );
-    } finally {
-      setSavingGeneralSkills(false);
-    }
-  }
-
-  async function autoRefreshNotesFromFeedback() {
-    if (!playerId) return;
-    setMsg(null);
-    setErrMsg(null);
-    setAutoRefreshingNotes(true);
-    try {
-      const data = await api<{
-        ok: true;
-        feedback_used: number;
-        goals_created: number;
-      }>(`/api/admin/players/${playerId}/auto-notes`, {
-        method: "POST",
-        securityCode,
-        body: JSON.stringify({ include_goals: autoRefreshWithGoals }),
-      });
-
-      await loadPlayer(securityCode, playerId);
-      if (autoRefreshWithGoals || data.goals_created > 0) {
-        await loadGoals(securityCode, playerId);
-      }
-
-      markChecklistStepDone("development");
-      markChecklistStepDone("skills");
-      if (autoRefreshWithGoals) {
-        markChecklistStepDone("goals");
-      }
-
-      setMsg(
-        `Auto-updated from ${data.feedback_used} feedback entries.${
-          autoRefreshWithGoals
-            ? ` Added ${data.goals_created} new coach goals.`
-            : ""
-        }`,
-      );
-    } catch (e) {
-      setErrMsg(
-        e instanceof Error ? e.message : "Failed to auto-update from feedback.",
-      );
-    } finally {
-      setAutoRefreshingNotes(false);
-    }
-  }
-
   const changed = useMemo(() => {
     if (!player || !draft) return false;
     return JSON.stringify(player) !== JSON.stringify(draft);
   }, [player, draft]);
-
-  const selectedFeedback = useMemo(() => {
-    if (feedbackEntries.length === 0) return null;
-    if (!selectedFeedbackId) return feedbackEntries[0];
-    return (
-      feedbackEntries.find((entry) => entry.id === selectedFeedbackId) ??
-      feedbackEntries[0]
-    );
-  }, [feedbackEntries, selectedFeedbackId]);
-
-  const checklistCompletedCount = useMemo(
-    () => Object.values(checklistStatus).filter(Boolean).length,
-    [checklistStatus],
-  );
-  const allChecklistStepsComplete = checklistCompletedCount === 4;
 
   return (
     <div className="min-h-screen bg-emerald-50">
@@ -1228,10 +880,10 @@ export default function AdminPlayerClient(props: {
 
           <div className="flex items-center gap-3">
             <Link
-              href="/admin"
+              href="/admin/players"
               className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300"
             >
-              Back to admin
+              ← Players
             </Link>
             {authorized && playerId && (
               <Link
@@ -1302,10 +954,7 @@ export default function AdminPlayerClient(props: {
                     await loadPlayer(securityCode, playerId);
                     await loadTests(securityCode, playerId);
                     await loadProfiles(securityCode, playerId);
-                    await loadGoals(securityCode, playerId);
-                    await loadSessions(securityCode, playerId);
                     await loadContentSubmissions(securityCode, playerId);
-                    await loadFeedback(securityCode, playerId);
                   } catch (e) {
                     setAuthError(
                       e instanceof Error ? e.message : "Unauthorized",
@@ -1344,10 +993,7 @@ export default function AdminPlayerClient(props: {
                       await loadPlayer(securityCode, playerId);
                       await loadTests(securityCode, playerId);
                       await loadProfiles(securityCode, playerId);
-                      await loadGoals(securityCode, playerId);
-                      await loadSessions(securityCode, playerId);
                       await loadContentSubmissions(securityCode, playerId);
-                      await loadFeedback(securityCode, playerId);
                       setMsg("Refreshed.");
                     }}
                     disabled={isPending}
@@ -1367,118 +1013,6 @@ export default function AdminPlayerClient(props: {
                   }`}
                 >
                   {errMsg ?? msg}
-                </div>
-              )}
-
-              {autoNotesMeta.stale && (
-                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                  Notes were last auto-updated on {autoNotesMeta.label}. This is
-                  older than 2 weeks, so run auto-update again.
-                </div>
-              )}
-
-              {showEndSessionChecklist && (
-                <div
-                  id="end-session-checklist"
-                  className="mt-6 rounded-3xl border border-emerald-300 bg-emerald-50/80 p-5"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-gray-900">
-                        End of Session Checklist
-                      </div>
-                      <div className="mt-1 text-sm text-gray-700">
-                        Complete each step for {draft.name}. Steps can be marked
-                        automatically when you submit, or manually if no changes are
-                        needed.
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setChecklistStatus(INITIAL_CHECKLIST_STATUS)}
-                      className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
-                    >
-                      Reset checklist
-                    </button>
-                  </div>
-
-                  <div className="mt-4 grid gap-3">
-                    {[
-                      {
-                        step: "feedback" as const,
-                        title: "1. Submit feedback",
-                        targetId: "end-session-feedback-section",
-                      },
-                      {
-                        step: "development" as const,
-                        title:
-                          "2. Update strengths, focus areas, long-term development",
-                        targetId: "end-session-development-section",
-                      },
-                      {
-                        step: "skills" as const,
-                        title: "3. Update general soccer skills",
-                        targetId: "end-session-skills-section",
-                      },
-                      {
-                        step: "goals" as const,
-                        title: "4. Add / update / complete / delete goals",
-                        targetId: "end-session-goals-section",
-                      },
-                    ].map((item) => {
-                      const done = checklistStatus[item.step];
-                      return (
-                        <div
-                          key={item.step}
-                          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-white px-4 py-3"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span
-                              className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-                                done
-                                  ? "bg-emerald-600 text-white"
-                                  : "bg-gray-200 text-gray-600"
-                              }`}
-                            >
-                              {done ? "x" : ""}
-                            </span>
-                            <div className="text-sm font-medium text-gray-900">
-                              {item.title}
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => scrollToSection(item.targetId)}
-                              className="rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
-                            >
-                              Go to section
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => toggleChecklistStep(item.step)}
-                              className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
-                                done
-                                  ? "border border-gray-300 bg-white text-gray-700 hover:border-gray-400"
-                                  : "bg-emerald-600 text-white hover:bg-emerald-700"
-                              }`}
-                            >
-                              {done ? "Undo" : "Mark done"}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="mt-4 text-sm text-gray-700">
-                    {checklistCompletedCount}/4 complete
-                  </div>
-                  {allChecklistStepsComplete && (
-                    <div className="mt-2 rounded-xl border border-emerald-300 bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-800">
-                      Checklist complete for this player.
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -1582,1261 +1116,856 @@ export default function AdminPlayerClient(props: {
                 </div>
               </div>
 
-              <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-semibold text-blue-900">
-                      Auto-update notes from feedback
-                    </div>
-                    <div className="mt-1 text-sm text-blue-800">
-                      Uses the latest 4 feedback entries to regenerate strengths,
-                      focus areas, long-term development, and general soccer skills.
-                    </div>
-                    <div className="mt-1 text-xs text-blue-700">
-                      Last auto-update: {autoNotesMeta.label}
-                    </div>
+
+              {/* Coaching Reports section */}
+              <div className="mt-8 rounded-3xl border border-violet-200 bg-violet-50 p-5">
+                <div className="mb-4">
+                  <div className="text-sm font-semibold text-gray-900">Feedback &amp; Reports</div>
+                  <div className="mt-1 text-sm text-gray-600">
+                    Baseline snapshots, progress reports, and coach blurbs visible to the player.
+                  </div>
+                </div>
+
+                {/* New report form */}
+                <div className="mb-4 space-y-3 rounded-2xl border border-violet-200 bg-white p-4">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">New Report</div>
+
+                  {/* Type selector */}
+                  <div className="flex gap-2">
+                    {(["blurb", "baseline", "progress"] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => { setCrNewType(t); setCrNewContent({}); }}
+                        className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                          crNewType === t
+                            ? "bg-violet-600 text-white"
+                            : "border border-violet-200 text-violet-700 hover:bg-violet-50"
+                        }`}
+                      >
+                        {t === "blurb" ? "Coach's Note" : t === "baseline" ? "Baseline Snapshot" : "Progress Report"}
+                      </button>
+                    ))}
                   </div>
 
-                  <div className="flex min-w-[280px] flex-col items-end gap-3">
-                    <label className="flex items-center gap-2 text-sm text-blue-900">
-                      <input
-                        type="checkbox"
-                        checked={autoRefreshWithGoals}
-                        onChange={(e) => setAutoRefreshWithGoals(e.target.checked)}
-                        className="h-4 w-4 accent-blue-600"
-                      />
-                      Also create 2 new coach goals
-                    </label>
+                  <input
+                    value={crNewTitle}
+                    onChange={(e) => setCrNewTitle(e.target.value)}
+                    placeholder="Title"
+                    className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-violet-300 focus:ring-4 focus:ring-violet-50"
+                  />
+
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-400">Date</label>
+                    <input
+                      type="date"
+                      value={crNewDate}
+                      onChange={(e) => setCrNewDate(e.target.value)}
+                      className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-violet-300 focus:ring-4 focus:ring-violet-50"
+                    />
+                  </div>
+
+                  {/* Blurb fields */}
+                  {crNewType === "blurb" && (
+                    <textarea
+                      value={(crNewContent.text as string) ?? ""}
+                      onChange={(e) => setCrNewContent({ text: e.target.value })}
+                      placeholder="Write your note here…"
+                      rows={4}
+                      className="w-full resize-y rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-violet-300 focus:ring-4 focus:ring-violet-50"
+                    />
+                  )}
+
+                  {/* Baseline fields */}
+                  {crNewType === "baseline" && (() => {
+                    const c = crNewContent as {
+                      early_coaching_read?: string;
+                      early_strengths?: string;
+                      early_focus_areas?: string;
+                      learning_notes?: string;
+                      starting_direction?: string;
+                    };
+                    const set = (k: string, v: string) => setCrNewContent((p) => ({ ...p, [k]: v }));
+                    return (
+                      <div className="space-y-3">
+                        {[
+                          { key: "early_coaching_read", label: "Early Coaching Read", rows: 3 },
+                          { key: "early_strengths", label: "Early Strengths (one per line)", rows: 3 },
+                          { key: "early_focus_areas", label: "Early Focus Areas (one per line)", rows: 3 },
+                          { key: "learning_notes", label: "Learning / Training Notes", rows: 2 },
+                          { key: "starting_direction", label: "Starting Training Direction (one per line)", rows: 3 },
+                        ].map(({ key, label, rows }) => (
+                          <div key={key}>
+                            <label className="mb-1 block text-xs text-gray-500">{label}</label>
+                            <textarea
+                              value={(c as Record<string, string>)[key] ?? ""}
+                              onChange={(e) => set(key, e.target.value)}
+                              rows={rows}
+                              className="w-full resize-y rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-violet-300 focus:ring-4 focus:ring-violet-50"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Progress report fields */}
+                  {crNewType === "progress" && (() => {
+                    const c = crNewContent as Record<string, { rating?: string; notes?: string }>;
+                    const skillKeys = [
+                      { key: "first_touch", label: "First Touch" },
+                      { key: "dribbling", label: "Dribbling" },
+                      { key: "passing", label: "Passing Technique" },
+                      { key: "shot_technique", label: "Shot Technique" },
+                      { key: "vision", label: "Vision / Recognition" },
+                      { key: "soccer_habits", label: "Soccer Habits" },
+                    ];
+                    const setText = (section: string, field: string, v: string) =>
+                      setCrNewContent((p) => ({
+                        ...p,
+                        [section]: { ...(p[section] as Record<string, unknown> ?? {}), [field]: v },
+                      }));
+                    return (
+                      <div className="space-y-3">
+                        {skillKeys.map(({ key, label }) => (
+                          <div key={key} className="rounded-xl border border-violet-100 bg-violet-50/40 p-3">
+                            <div className="mb-2 text-xs font-semibold text-gray-700">{label}</div>
+                            <div className="grid gap-2 sm:grid-cols-[100px_1fr]">
+                              <select
+                                value={c[key]?.rating ?? ""}
+                                onChange={(e) => setText(key, "rating", e.target.value)}
+                                className="rounded-lg border border-violet-200 bg-white px-2 py-1.5 text-sm text-gray-800 outline-none"
+                              >
+                                <option value="">— Rating —</option>
+                                {[1,2,3,4,5].map((n) => <option key={n} value={n}>{n}</option>)}
+                              </select>
+                              <input
+                                value={c[key]?.notes ?? ""}
+                                onChange={(e) => setText(key, "notes", e.target.value)}
+                                placeholder="Coach notes…"
+                                className="rounded-lg border border-violet-200 bg-white px-2 py-1.5 text-sm text-gray-800 outline-none"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                        {[
+                          { key: "overall_strengths", label: "Overall Strengths" },
+                          { key: "continue_focus", label: "Where to Continue Focus" },
+                          { key: "long_term_goals", label: "Long-Term Goals" },
+                        ].map(({ key, label }) => (
+                          <div key={key}>
+                            <label className="mb-1 block text-xs text-gray-500">{label}</label>
+                            <textarea
+                              value={(crNewContent[key] as string) ?? ""}
+                              onChange={(e) => setCrNewContent((p) => ({ ...p, [key]: e.target.value }))}
+                              rows={2}
+                              className="w-full resize-y rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-violet-300 focus:ring-4 focus:ring-violet-50"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
+                  <div className="flex justify-end">
                     <button
                       type="button"
-                      disabled={autoRefreshingNotes || !playerId}
+                      disabled={isPending}
                       onClick={() => {
-                        void autoRefreshNotesFromFeedback();
+                        if (!playerId) return;
+                        setMsg(null); setErrMsg(null);
+                        startTransition(async () => {
+                          try {
+                            await createCoachingReport(securityCode, playerId);
+                            setMsg("Report created.");
+                          } catch (e) {
+                            setErrMsg(e instanceof Error ? e.message : "Failed.");
+                          }
+                        });
                       }}
-                      className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-70"
                     >
-                      {autoRefreshingNotes
-                        ? "Auto-updating..."
-                        : "Auto-update from feedback"}
+                      Create report
                     </button>
                   </div>
                 </div>
-              </div>
 
-              <div id="end-session-development-section" className="mt-6 grid gap-4">
-                <TextArea
-                  label="Strengths"
-                  value={draft.strengths ?? ""}
-                  onChange={(v) => setDraft({ ...draft, strengths: v || null })}
-                />
-                <TextArea
-                  label="Focus areas"
-                  value={draft.focus_areas ?? ""}
-                  onChange={(v) =>
-                    setDraft({ ...draft, focus_areas: v || null })
-                  }
-                />
-                <TextArea
-                  label="Long-term development notes"
-                  value={draft.long_term_development_notes ?? ""}
-                  onChange={(v) =>
-                    setDraft({
-                      ...draft,
-                      long_term_development_notes: v || null,
-                    })
-                  }
-                />
-              </div>
+                {/* List of existing reports */}
+                {coachingReports.length === 0 ? (
+                  <div className="text-sm text-gray-500">No reports yet.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {coachingReports.map((r) => {
+                      const expanded = crExpanded[r.id] ?? false;
+                      const d = crEditDrafts[r.id] ?? { title: r.title, report_date: r.report_date, content: r.content };
+                      const typeLabel = r.type === "blurb" ? "Coach's Note" : r.type === "baseline" ? "Baseline Snapshot" : "Progress Report";
+                      const typeBadge = r.type === "blurb"
+                        ? "bg-blue-100 text-blue-700"
+                        : r.type === "baseline"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-emerald-100 text-emerald-700";
 
-              <div className="mt-3 flex justify-end">
-                <button
-                  type="button"
-                  disabled={savingDevelopmentNotes || !playerId}
-                  onClick={() => {
-                    void saveDevelopmentNotes();
-                  }}
-                  className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {savingDevelopmentNotes
-                    ? "Saving..."
-                    : "Save development notes"}
-                </button>
-              </div>
+                      return (
+                        <div key={r.id} className="overflow-hidden rounded-2xl border border-violet-200 bg-white">
+                          <button
+                            type="button"
+                            onClick={() => setCrExpanded((p) => ({ ...p, [r.id]: !expanded }))}
+                            className="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-violet-50"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${typeBadge}`}>{typeLabel}</span>
+                              <span className="text-sm font-semibold text-gray-900">{r.title}</span>
+                              <span className="text-xs text-gray-400">{r.report_date}</span>
+                            </div>
+                            <span className="text-xs text-gray-400">{expanded ? "▲" : "▼"}</span>
+                          </button>
 
-              <div id="end-session-skills-section" className="mt-6 space-y-3">
-                <div>
-                  <div className="text-sm font-semibold text-gray-900">
-                    General soccer skills
+                          {expanded && (
+                            <div className="space-y-3 border-t border-violet-100 p-4">
+                              <input
+                                value={d.title}
+                                onChange={(e) => setCrEditDrafts((p) => ({ ...p, [r.id]: { ...d, title: e.target.value } }))}
+                                className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none focus:border-violet-300"
+                              />
+                              <div>
+                                <label className="mb-1 block text-xs text-gray-400">Date</label>
+                                <input
+                                  type="date"
+                                  value={d.report_date}
+                                  onChange={(e) => setCrEditDrafts((p) => ({ ...p, [r.id]: { ...d, report_date: e.target.value } }))}
+                                  className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-violet-300"
+                                />
+                              </div>
+
+                              {/* Blurb edit */}
+                              {r.type === "blurb" && (
+                                <textarea
+                                  value={(d.content.text as string) ?? ""}
+                                  onChange={(e) => setCrEditDrafts((p) => ({ ...p, [r.id]: { ...d, content: { text: e.target.value } } }))}
+                                  rows={4}
+                                  className="w-full resize-y rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-violet-300"
+                                />
+                              )}
+
+                              {/* Baseline edit */}
+                              {r.type === "baseline" && (() => {
+                                const c = d.content as Record<string, string>;
+                                const setField = (k: string, v: string) =>
+                                  setCrEditDrafts((p) => ({ ...p, [r.id]: { ...d, content: { ...d.content, [k]: v } } }));
+                                return (
+                                  <div className="space-y-2">
+                                    {[
+                                      { key: "early_coaching_read", label: "Early Coaching Read", rows: 3 },
+                                      { key: "early_strengths", label: "Early Strengths (one per line)", rows: 3 },
+                                      { key: "early_focus_areas", label: "Early Focus Areas (one per line)", rows: 3 },
+                                      { key: "learning_notes", label: "Learning / Training Notes", rows: 2 },
+                                      { key: "starting_direction", label: "Starting Training Direction (one per line)", rows: 3 },
+                                    ].map(({ key, label, rows }) => (
+                                      <div key={key}>
+                                        <label className="mb-0.5 block text-xs text-gray-400">{label}</label>
+                                        <textarea value={c[key] ?? ""} onChange={(e) => setField(key, e.target.value)} rows={rows}
+                                          className="w-full resize-y rounded-xl border border-violet-200 bg-white px-3 py-1.5 text-sm text-gray-800 outline-none focus:border-violet-300" />
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Progress report edit */}
+                              {r.type === "progress" && (() => {
+                                const c = d.content as Record<string, unknown>;
+                                const skillKeys = [
+                                  { key: "first_touch", label: "First Touch" },
+                                  { key: "dribbling", label: "Dribbling" },
+                                  { key: "passing", label: "Passing Technique" },
+                                  { key: "shot_technique", label: "Shot Technique" },
+                                  { key: "vision", label: "Vision / Recognition" },
+                                  { key: "soccer_habits", label: "Soccer Habits" },
+                                ];
+                                const setText = (section: string, field: string, v: string) =>
+                                  setCrEditDrafts((p) => ({
+                                    ...p,
+                                    [r.id]: { ...d, content: { ...d.content, [section]: { ...(d.content[section] as Record<string, unknown> ?? {}), [field]: v } } },
+                                  }));
+                                return (
+                                  <div className="space-y-2">
+                                    {skillKeys.map(({ key, label }) => {
+                                      const area = (c[key] as { rating?: string; notes?: string }) ?? {};
+                                      return (
+                                        <div key={key} className="rounded-xl border border-violet-100 bg-violet-50/40 p-2">
+                                          <div className="mb-1 text-xs font-semibold text-gray-700">{label}</div>
+                                          <div className="grid gap-2 sm:grid-cols-[100px_1fr]">
+                                            <select value={area.rating ?? ""} onChange={(e) => setText(key, "rating", e.target.value)}
+                                              className="rounded-lg border border-violet-200 bg-white px-2 py-1 text-sm text-gray-800 outline-none">
+                                              <option value="">— Rating —</option>
+                                              {[1,2,3,4,5].map((n) => <option key={n} value={n}>{n}</option>)}
+                                            </select>
+                                            <input value={area.notes ?? ""} onChange={(e) => setText(key, "notes", e.target.value)}
+                                              placeholder="Notes…" className="rounded-lg border border-violet-200 bg-white px-2 py-1 text-sm text-gray-800 outline-none" />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                    {[
+                                      { key: "overall_strengths", label: "Overall Strengths" },
+                                      { key: "continue_focus", label: "Where to Continue Focus" },
+                                      { key: "long_term_goals", label: "Long-Term Goals" },
+                                    ].map(({ key, label }) => (
+                                      <div key={key}>
+                                        <label className="mb-0.5 block text-xs text-gray-400">{label}</label>
+                                        <textarea value={(c[key] as string) ?? ""}
+                                          onChange={(e) => setCrEditDrafts((p) => ({ ...p, [r.id]: { ...d, content: { ...d.content, [key]: e.target.value } } }))}
+                                          rows={2} className="w-full resize-y rounded-xl border border-violet-200 bg-white px-3 py-1.5 text-sm text-gray-800 outline-none focus:border-violet-300" />
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+
+                              <div className="flex gap-2">
+                                <button type="button" disabled={isPending}
+                                  onClick={() => {
+                                    if (!playerId) return;
+                                    setMsg(null); setErrMsg(null);
+                                    startTransition(async () => {
+                                      try {
+                                        await saveCoachingReport(securityCode, playerId, r.id);
+                                        setMsg("Report saved.");
+                                      } catch (e) { setErrMsg(e instanceof Error ? e.message : "Failed."); }
+                                    });
+                                  }}
+                                  className="rounded-xl border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:border-violet-300 disabled:opacity-60">
+                                  Save
+                                </button>
+                                <button type="button" disabled={isPending}
+                                  onClick={() => {
+                                    if (!playerId || !window.confirm(`Delete "${r.title}"?`)) return;
+                                    setMsg(null); setErrMsg(null);
+                                    startTransition(async () => {
+                                      try {
+                                        await deleteCoachingReport(securityCode, playerId, r.id);
+                                        setMsg("Deleted.");
+                                      } catch (e) { setErrMsg(e instanceof Error ? e.message : "Failed."); }
+                                    });
+                                  }}
+                                  className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-300 disabled:opacity-60">
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
+                )}
+              </div>
+
+              {/* Period Goals section */}
+              <div className="mt-8 rounded-3xl border border-blue-200 bg-blue-50 p-5">
+                <div className="mb-4">
+                  <div className="text-sm font-semibold text-gray-900">Period Goals</div>
                   <div className="mt-1 text-sm text-gray-600">
-                    Add a rating from 1 to 5 and notes for each skill area.
+                    Weekly focus periods with steps. Players see these as a timeline.
                   </div>
                 </div>
 
-                <SkillRatingRow
-                  label="First Touch"
-                  rating={draft.first_touch_rating}
-                  notes={draft.first_touch_notes}
-                  onRatingChange={(value) =>
-                    setDraft({ ...draft, first_touch_rating: value })
-                  }
-                  onNotesChange={(value) =>
-                    setDraft({ ...draft, first_touch_notes: value })
-                  }
-                />
-
-                <SkillRatingRow
-                  label="1v1 Ability"
-                  rating={draft.one_v_one_ability_rating}
-                  notes={draft.one_v_one_ability_notes}
-                  onRatingChange={(value) =>
-                    setDraft({ ...draft, one_v_one_ability_rating: value })
-                  }
-                  onNotesChange={(value) =>
-                    setDraft({ ...draft, one_v_one_ability_notes: value })
-                  }
-                />
-
-                <SkillRatingRow
-                  label="Passing Technique"
-                  rating={draft.passing_technique_rating}
-                  notes={draft.passing_technique_notes}
-                  onRatingChange={(value) =>
-                    setDraft({ ...draft, passing_technique_rating: value })
-                  }
-                  onNotesChange={(value) =>
-                    setDraft({ ...draft, passing_technique_notes: value })
-                  }
-                />
-
-                <SkillRatingRow
-                  label="Shot Technique"
-                  rating={draft.shot_technique_rating}
-                  notes={draft.shot_technique_notes}
-                  onRatingChange={(value) =>
-                    setDraft({ ...draft, shot_technique_rating: value })
-                  }
-                  onNotesChange={(value) =>
-                    setDraft({ ...draft, shot_technique_notes: value })
-                  }
-                />
-
-                <SkillRatingRow
-                  label="Vision / Recognition"
-                  rating={draft.vision_recognition_rating}
-                  notes={draft.vision_recognition_notes}
-                  onRatingChange={(value) =>
-                    setDraft({ ...draft, vision_recognition_rating: value })
-                  }
-                  onNotesChange={(value) =>
-                    setDraft({ ...draft, vision_recognition_notes: value })
-                  }
-                />
-
-                <SkillRatingRow
-                  label="Great Soccer Habits"
-                  rating={draft.great_soccer_habits_rating}
-                  notes={draft.great_soccer_habits_notes}
-                  onRatingChange={(value) =>
-                    setDraft({ ...draft, great_soccer_habits_rating: value })
-                  }
-                  onNotesChange={(value) =>
-                    setDraft({ ...draft, great_soccer_habits_notes: value })
-                  }
-                />
-
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    disabled={savingGeneralSkills || !playerId}
-                    onClick={() => {
-                      void saveGeneralSkills();
-                    }}
-                    className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {savingGeneralSkills
-                      ? "Saving..."
-                      : "Save general soccer skills"}
-                  </button>
-                </div>
-              </div>
-
-              <div
-                id="end-session-feedback-section"
-                className="mt-8 rounded-3xl border border-emerald-200 bg-emerald-50 p-5"
-              >
-                <div>
-                  <div className="text-sm font-semibold text-gray-900">
-                    Player feedback
+                {/* Create new period goal */}
+                <div className="mb-4 space-y-3 rounded-2xl border border-blue-200 bg-white p-4">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">New Period Goal</div>
+                  <input
+                    value={newPGTitle}
+                    onChange={(e) => setNewPGTitle(e.target.value)}
+                    placeholder="Title (e.g. Weak foot dribbling)"
+                    className="w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+                  />
+                  <textarea
+                    value={newPGDescription}
+                    onChange={(e) => setNewPGDescription(e.target.value)}
+                    placeholder="Description (optional)"
+                    rows={2}
+                    className="w-full resize-y rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+                  />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-500">Start date</label>
+                      <input
+                        type="date"
+                        value={newPGStartDate}
+                        onChange={(e) => setNewPGStartDate(e.target.value)}
+                        className="w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-500">End date</label>
+                      <input
+                        type="date"
+                        value={newPGEndDate}
+                        onChange={(e) => setNewPGEndDate(e.target.value)}
+                        className="w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+                      />
+                    </div>
                   </div>
-                  <div className="mt-1 text-sm text-gray-600">
-                    Write raw notes, then generate clean markdown with GPT-5.
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-4 xl:grid-cols-[280px_1fr]">
-                  <div className="space-y-3">
-                    <textarea
-                      value={newFeedbackRawContent}
-                      onChange={(e) => setNewFeedbackRawContent(e.target.value)}
-                      rows={8}
-                      placeholder="Raw feedback notes..."
-                      className="w-full resize-y rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder:text-gray-500 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                    />
+                  <div className="flex justify-end">
                     <button
                       type="button"
-                      disabled={creatingFeedback || !playerId}
+                      disabled={isPending}
                       onClick={() => {
                         if (!playerId) return;
                         setMsg(null);
                         setErrMsg(null);
-                        void createFeedback(securityCode, playerId).catch((e) => {
-                          setErrMsg(
-                            e instanceof Error
-                              ? e.message
-                              : "Failed to create feedback.",
-                          );
+                        startTransition(async () => {
+                          try {
+                            await createPeriodGoal(securityCode, playerId);
+                            setMsg("Period goal created.");
+                          } catch (e) {
+                            setErrMsg(e instanceof Error ? e.message : "Failed.");
+                          }
                         });
                       }}
-                      className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-70"
                     >
-                      {creatingFeedback
-                        ? "Creating with GPT-5..."
-                        : "Submit feedback"}
+                      Create goal
                     </button>
-
-                    <div className="rounded-2xl border border-emerald-200 bg-white p-2">
-                      <div className="px-2 py-1 text-xs font-semibold text-gray-700">
-                        Saved feedback
-                      </div>
-                      <div className="max-h-80 space-y-1 overflow-y-auto px-1 pb-1">
-                        {feedbackEntries.length === 0 ? (
-                          <div className="rounded-xl px-2 py-3 text-xs text-gray-600">
-                            No feedback yet.
-                          </div>
-                        ) : (
-                          feedbackEntries.map((entry) => {
-                            const active =
-                              selectedFeedback?.id === entry.id;
-                            return (
-                              <button
-                                key={entry.id}
-                                type="button"
-                                onClick={() => setSelectedFeedbackId(entry.id)}
-                                className={`w-full rounded-xl border px-3 py-2 text-left transition ${
-                                  active
-                                    ? "border-emerald-300 bg-emerald-50"
-                                    : "border-transparent bg-white hover:border-emerald-200 hover:bg-emerald-50/40"
-                                }`}
-                              >
-                                <div className="text-xs font-semibold text-gray-900">
-                                  {formatFeedbackTitleForDisplay(entry.title)}
-                                </div>
-                                <div className="mt-1 text-xs text-gray-500">
-                                  {formatDateLabel(entry.created_at)}
-                                </div>
-                              </button>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
                   </div>
+                </div>
 
-                  <div className="rounded-2xl border border-emerald-200 bg-white p-5">
-                    {!selectedFeedback ? (
-                      <div className="text-sm text-gray-600">
-                        Select a feedback entry from the left.
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="text-base font-semibold text-gray-900">
-                            {formatFeedbackTitleForDisplay(selectedFeedback.title)}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="text-xs text-gray-500">
-                              {formatDateLabel(selectedFeedback.created_at)}
+                {/* List of period goals */}
+                {periodGoals.length === 0 ? (
+                  <div className="text-sm text-gray-500">No period goals yet.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {periodGoals.map((g) => {
+                      const d = pgDrafts[g.id] ?? {
+                        title: g.title,
+                        description: g.description ?? "",
+                        start_date: g.start_date,
+                        end_date: g.end_date,
+                      };
+                      const sd = newStepDrafts[g.id] ?? { title: "", description: "", target_date: "", sort_order: "0" };
+                      const expanded = pgExpanded[g.id] ?? false;
+                      const doneCount = g.steps.filter((s) => s.completed).length;
+
+                      return (
+                        <div key={g.id} className="overflow-hidden rounded-2xl border border-blue-200 bg-white">
+                          {/* Goal header row */}
+                          <button
+                            type="button"
+                            onClick={() => setPgExpanded((prev) => ({ ...prev, [g.id]: !expanded }))}
+                            className="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-blue-50"
+                          >
+                            <div>
+                              <span className="text-sm font-semibold text-gray-900">{g.title}</span>
+                              <span className="ml-2 text-xs text-gray-400">
+                                {g.start_date} – {g.end_date}
+                              </span>
+                              {g.steps.length > 0 && (
+                                <span className="ml-2 text-xs text-gray-400">
+                                  · {doneCount}/{g.steps.length} steps
+                                </span>
+                              )}
                             </div>
-                            <button
-                              type="button"
-                              disabled={
-                                !playerId ||
-                                recleaningFeedbackId === selectedFeedback.id
-                              }
-                              onClick={() => {
-                                if (!playerId) return;
-                                setMsg(null);
-                                setErrMsg(null);
-                                void recleanFeedback(
-                                  securityCode,
-                                  playerId,
-                                  selectedFeedback.id,
-                                ).catch((e) => {
-                                  setErrMsg(
-                                    e instanceof Error
-                                      ? e.message
-                                      : "Failed to re-clean feedback.",
-                                  );
-                                });
-                              }}
-                              className="rounded-lg border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {recleaningFeedbackId === selectedFeedback.id
-                                ? "Re-cleaning..."
-                                : "Re-clean"}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={
-                                !playerId ||
-                                deletingFeedbackId === selectedFeedback.id
-                              }
-                              onClick={() => {
-                                if (!playerId) return;
-                                if (
-                                  !window.confirm(
-                                    `Delete "${formatFeedbackTitleForDisplay(selectedFeedback.title)}"?`,
-                                  )
-                                ) {
-                                  return;
-                                }
-                                setMsg(null);
-                                setErrMsg(null);
-                                void deleteFeedback(
-                                  securityCode,
-                                  playerId,
-                                  selectedFeedback.id,
-                                ).catch((e) => {
-                                  setErrMsg(
-                                    e instanceof Error
-                                      ? e.message
-                                      : "Failed to delete feedback.",
-                                  );
-                                });
-                              }}
-                              className="rounded-lg border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 transition hover:border-red-300 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {deletingFeedbackId === selectedFeedback.id
-                                ? "Deleting..."
-                                : "Delete"}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
-                          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                            Cleaned markdown
-                          </div>
-                          <div className="feedback-markdown text-sm leading-relaxed text-gray-800">
-                            <FeedbackMarkdown
-                              content={
-                                selectedFeedback.cleaned_markdown_content?.trim() ||
-                                selectedFeedback.raw_content
-                              }
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
+                            <span className="text-xs text-gray-400">{expanded ? "▲" : "▼"}</span>
+                          </button>
 
-              <div
-                id="end-session-goals-section"
-                className="mt-8 rounded-3xl border border-emerald-200 bg-emerald-50 p-5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-gray-900">
-                      Goals
-                    </div>
-                    <div className="mt-1 text-sm text-gray-600">
-                      Add, edit, and complete goals for this player.
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <input
-                    value={newGoalName}
-                    onChange={(e) => setNewGoalName(e.target.value)}
-                    placeholder="New goal (e.g., 50 juggles without drop)"
-                    className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50 sm:col-span-2"
-                  />
-                  <input
-                    value={newGoalDueDate}
-                    onChange={(e) => setNewGoalDueDate(e.target.value)}
-                    type="date"
-                    className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                  />
-                </div>
-                <div className="mt-3 flex justify-end">
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => {
-                      if (!playerId) return;
-                      setMsg(null);
-                      setErrMsg(null);
-                      startTransition(async () => {
-                        try {
-                          await createGoal(securityCode, playerId);
-                          setMsg("Goal added.");
-                        } catch (e) {
-                          setErrMsg(
-                            e instanceof Error
-                              ? e.message
-                              : "Failed to add goal.",
-                          );
-                        }
-                      });
-                    }}
-                    className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    Add goal
-                  </button>
-                </div>
-
-                {(() => {
-                  const todo = goals.filter((g) => !g.completed);
-                  const done = goals.filter((g) => g.completed);
-
-                  return (
-                    <div className="mt-5 space-y-5">
-                      <div>
-                        <div className="text-xs font-semibold text-gray-900">
-                          To do
-                        </div>
-                        <div className="mt-2 grid gap-2">
-                          {todo.length === 0 ? (
-                            <div className="text-sm text-gray-600">
-                              No active goals yet.
-                            </div>
-                          ) : (
-                            todo.map((g) => {
-                              const d = goalDrafts[g.id] ?? {
-                                name: g.name,
-                                due_date: g.due_date ?? "",
-                              };
-                              return (
-                                <div
-                                  key={g.id}
-                                  className="rounded-2xl border border-emerald-200 bg-white p-4"
-                                >
-                                  <div className="flex flex-wrap items-start justify-between gap-3">
-                                    <label className="flex items-start gap-3">
-                                      <input
-                                        type="checkbox"
-                                        checked={g.completed}
-                                        onChange={(e) => {
-                                          if (!playerId) return;
-                                          const next = e.target.checked;
-                                          startTransition(async () => {
-                                            try {
-                                              await saveGoal(
-                                                securityCode,
-                                                playerId,
-                                                g.id,
-                                                { completed: next },
-                                              );
-                                            } catch (e2) {
-                                              setErrMsg(
-                                                e2 instanceof Error
-                                                  ? e2.message
-                                                  : "Failed to update goal.",
-                                              );
-                                            }
-                                          });
-                                        }}
-                                        className="mt-1 h-4 w-4 accent-emerald-600"
-                                      />
-                                      <div className="min-w-[240px] flex-1">
-                                        <div className="mb-2">
-                                          <input
-                                            value={d.name}
-                                            onChange={(e) =>
-                                              setGoalDrafts((prev) => ({
-                                                ...prev,
-                                                [g.id]: {
-                                                  ...d,
-                                                  name: e.target.value,
-                                                },
-                                              }))
-                                            }
-                                            className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                                          />
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <input
-                                            value={d.due_date}
-                                            onChange={(e) =>
-                                              setGoalDrafts((prev) => ({
-                                                ...prev,
-                                                [g.id]: {
-                                                  ...d,
-                                                  due_date: e.target.value,
-                                                },
-                                              }))
-                                            }
-                                            type="date"
-                                            className="flex-1 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                                          />
-                                          <span
-                                            className={`rounded-lg px-2 py-1 text-xs font-semibold whitespace-nowrap ${
-                                              g.set_by === "coach"
-                                                ? "bg-blue-100 text-blue-700"
-                                                : "bg-gray-100 text-gray-700"
-                                            }`}
-                                          >
-                                            {g.set_by === "coach"
-                                              ? "Set by coach"
-                                              : "Set by parent"}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </label>
-
-                                    <div className="flex flex-wrap gap-2">
-                                      <button
-                                        type="button"
-                                        disabled={isPending}
-                                        onClick={() => {
-                                          if (!playerId) return;
-                                          setMsg(null);
-                                          setErrMsg(null);
-                                          startTransition(async () => {
-                                            try {
-                                              await saveGoal(
-                                                securityCode,
-                                                playerId,
-                                                g.id,
-                                                {
-                                                  name: d.name.trim(),
-                                                  due_date: d.due_date || null,
-                                                },
-                                              );
-                                              setMsg("Goal saved.");
-                                            } catch (e2) {
-                                              setErrMsg(
-                                                e2 instanceof Error
-                                                  ? e2.message
-                                                  : "Failed to save goal.",
-                                              );
-                                            }
-                                          });
-                                        }}
-                                        className="rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:opacity-60"
-                                      >
-                                        Save
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={isPending}
-                                        onClick={() => {
-                                          if (!playerId) return;
-                                          if (
-                                            window.confirm(
-                                              `Delete goal "${g.name}"?`,
-                                            )
-                                          ) {
-                                            setMsg(null);
-                                            setErrMsg(null);
-                                            startTransition(async () => {
-                                              try {
-                                                await deleteGoal(
-                                                  securityCode,
-                                                  playerId,
-                                                  g.id,
-                                                );
-                                                setMsg("Goal deleted.");
-                                              } catch (e2) {
-                                                setErrMsg(
-                                                  e2 instanceof Error
-                                                    ? e2.message
-                                                    : "Failed to delete goal.",
-                                                );
-                                              }
-                                            });
-                                          }
-                                        }}
-                                        className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-300 disabled:opacity-60"
-                                      >
-                                        Delete
-                                      </button>
-                                    </div>
+                          {expanded && (
+                            <div className="border-t border-blue-100 p-4 space-y-4">
+                              {/* Edit goal fields */}
+                              <div className="space-y-3">
+                                <input
+                                  value={d.title}
+                                  onChange={(e) => setPgDrafts((prev) => ({ ...prev, [g.id]: { ...d, title: e.target.value } }))}
+                                  className="w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+                                />
+                                <textarea
+                                  value={d.description}
+                                  onChange={(e) => setPgDrafts((prev) => ({ ...prev, [g.id]: { ...d, description: e.target.value } }))}
+                                  placeholder="Description (optional)"
+                                  rows={2}
+                                  className="w-full resize-y rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+                                />
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <div>
+                                    <label className="mb-1 block text-xs text-gray-500">Start date</label>
+                                    <input
+                                      type="date"
+                                      value={d.start_date}
+                                      onChange={(e) => setPgDrafts((prev) => ({ ...prev, [g.id]: { ...d, start_date: e.target.value } }))}
+                                      className="w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-xs text-gray-500">End date</label>
+                                    <input
+                                      type="date"
+                                      value={d.end_date}
+                                      onChange={(e) => setPgDrafts((prev) => ({ ...prev, [g.id]: { ...d, end_date: e.target.value } }))}
+                                      className="w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+                                    />
                                   </div>
                                 </div>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs font-semibold text-gray-900">
-                          Completed
-                        </div>
-                        <div className="mt-2 grid gap-2">
-                          {done.length === 0 ? (
-                            <div className="text-sm text-gray-600">
-                              No completed goals yet.
-                            </div>
-                          ) : (
-                            done.map((g) => (
-                              <div
-                                key={g.id}
-                                className="rounded-2xl border border-emerald-200 bg-white px-4 py-3"
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                  <label className="flex items-center gap-3">
-                                    <input
-                                      type="checkbox"
-                                      checked={g.completed}
-                                      onChange={(e) => {
-                                        if (!playerId) return;
-                                        const next = e.target.checked;
-                                        startTransition(async () => {
-                                          try {
-                                            await saveGoal(
-                                              securityCode,
-                                              playerId,
-                                              g.id,
-                                              { completed: next },
-                                            );
-                                          } catch (e2) {
-                                            setErrMsg(
-                                              e2 instanceof Error
-                                                ? e2.message
-                                                : "Failed to update goal.",
-                                            );
-                                          }
-                                        });
-                                      }}
-                                      className="h-4 w-4 accent-emerald-600"
-                                    />
-                                    <div>
-                                      <div className="flex items-center gap-2">
-                                        <div className="text-sm font-semibold text-gray-900 line-through">
-                                          {g.name}
-                                        </div>
-                                        <span
-                                          className={`rounded-lg px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${
-                                            g.set_by === "coach"
-                                              ? "bg-blue-100 text-blue-700"
-                                              : "bg-gray-100 text-gray-700"
-                                          }`}
-                                        >
-                                          {g.set_by === "coach"
-                                            ? "Set by coach"
-                                            : "Set by parent"}
-                                        </span>
-                                      </div>
-                                      <div className="mt-0.5 text-xs text-gray-600">
-                                        {g.completed_at
-                                          ? `Completed ${new Date(
-                                              g.completed_at,
-                                            ).toLocaleDateString()}`
-                                          : "Completed"}
-                                        {g.due_date
-                                          ? ` • Due ${g.due_date}`
-                                          : ""}
-                                      </div>
-                                    </div>
-                                  </label>
+                                <div className="flex gap-2">
                                   <button
                                     type="button"
                                     disabled={isPending}
                                     onClick={() => {
                                       if (!playerId) return;
-                                      if (
-                                        window.confirm(
-                                          `Delete completed goal "${g.name}"?`,
-                                        )
-                                      ) {
-                                        startTransition(async () => {
-                                          try {
-                                            await deleteGoal(
-                                              securityCode,
-                                              playerId,
-                                              g.id,
-                                            );
-                                          } catch (e2) {
-                                            setErrMsg(
-                                              e2 instanceof Error
-                                                ? e2.message
-                                                : "Failed to delete goal.",
-                                            );
-                                          }
-                                        });
-                                      }
+                                      setMsg(null);
+                                      setErrMsg(null);
+                                      startTransition(async () => {
+                                        try {
+                                          await savePeriodGoal(securityCode, playerId, g.id);
+                                          setMsg("Saved.");
+                                        } catch (e) {
+                                          setErrMsg(e instanceof Error ? e.message : "Failed.");
+                                        }
+                                      });
+                                    }}
+                                    className="rounded-xl border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:border-blue-300 disabled:opacity-60"
+                                  >
+                                    Save goal
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isPending}
+                                    onClick={() => {
+                                      if (!playerId) return;
+                                      if (!window.confirm(`Delete "${g.title}"?`)) return;
+                                      setMsg(null);
+                                      setErrMsg(null);
+                                      startTransition(async () => {
+                                        try {
+                                          await deletePeriodGoal(securityCode, playerId, g.id);
+                                          setMsg("Deleted.");
+                                        } catch (e) {
+                                          setErrMsg(e instanceof Error ? e.message : "Failed.");
+                                        }
+                                      });
                                     }}
                                     className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-300 disabled:opacity-60"
                                   >
-                                    Delete
+                                    Delete goal
                                   </button>
                                 </div>
                               </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
 
-              <div className="mt-8 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
-                <div className="text-sm font-semibold text-gray-900">
-                  Training sessions
-                </div>
-                <p className="mt-1 text-sm text-gray-600">
-                  Record training sessions and publish them to parents.
-                </p>
+                              {/* Steps */}
+                              <div>
+                                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Steps</div>
+                                {g.steps.length === 0 ? (
+                                  <div className="text-xs text-gray-400">No steps yet.</div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {g.steps.map((step) => {
+                                      const isEditing = editingStepId === step.id;
+                                      const ed = stepEditDrafts[step.id] ?? {
+                                        title: step.title,
+                                        description: step.description ?? "",
+                                        target_date: step.target_date ?? "",
+                                        sort_order: String(step.sort_order),
+                                      };
+                                      return (
+                                        <div key={step.id} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+                                          {isEditing ? (
+                                            <div className="space-y-2">
+                                              <input
+                                                value={ed.title}
+                                                onChange={(e) => setStepEditDrafts((prev) => ({ ...prev, [step.id]: { ...ed, title: e.target.value } }))}
+                                                className="w-full rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-sm text-gray-800 outline-none focus:border-blue-300"
+                                                placeholder="Step title"
+                                              />
+                                              <input
+                                                value={ed.description}
+                                                onChange={(e) => setStepEditDrafts((prev) => ({ ...prev, [step.id]: { ...ed, description: e.target.value } }))}
+                                                className="w-full rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-sm text-gray-800 outline-none focus:border-blue-300"
+                                                placeholder="Description (optional)"
+                                              />
+                                              <div className="grid gap-2 sm:grid-cols-2">
+                                                <div>
+                                                  <label className="mb-0.5 block text-xs text-gray-400">Target date</label>
+                                                  <input
+                                                    type="date"
+                                                    value={ed.target_date}
+                                                    onChange={(e) => setStepEditDrafts((prev) => ({ ...prev, [step.id]: { ...ed, target_date: e.target.value } }))}
+                                                    className="w-full rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-sm text-gray-800 outline-none focus:border-blue-300"
+                                                  />
+                                                </div>
+                                                <div>
+                                                  <label className="mb-0.5 block text-xs text-gray-400">Sort order</label>
+                                                  <input
+                                                    type="number"
+                                                    value={ed.sort_order}
+                                                    onChange={(e) => setStepEditDrafts((prev) => ({ ...prev, [step.id]: { ...ed, sort_order: e.target.value } }))}
+                                                    className="w-full rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-sm text-gray-800 outline-none focus:border-blue-300"
+                                                  />
+                                                </div>
+                                              </div>
+                                              <div className="flex gap-2">
+                                                <button
+                                                  type="button"
+                                                  disabled={isPending}
+                                                  onClick={() => {
+                                                    if (!playerId) return;
+                                                    setMsg(null);
+                                                    setErrMsg(null);
+                                                    startTransition(async () => {
+                                                      try {
+                                                        await saveStep(securityCode, playerId, g.id, step, {
+                                                          title: ed.title,
+                                                          description: ed.description || null,
+                                                          target_date: ed.target_date || null,
+                                                          sort_order: Number(ed.sort_order) || 0,
+                                                        });
+                                                        setEditingStepId(null);
+                                                        setMsg("Step saved.");
+                                                      } catch (e2) {
+                                                        setErrMsg(e2 instanceof Error ? e2.message : "Failed.");
+                                                      }
+                                                    });
+                                                  }}
+                                                  className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
+                                                >
+                                                  Save
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setEditingStepId(null)}
+                                                  className="rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-500 transition hover:bg-gray-100"
+                                                >
+                                                  Cancel
+                                                </button>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div className="flex items-start gap-2">
+                                              <input
+                                                type="checkbox"
+                                                checked={step.completed}
+                                                onChange={(e) => {
+                                                  if (!playerId) return;
+                                                  startTransition(async () => {
+                                                    try {
+                                                      await saveStep(securityCode, playerId, g.id, step, { completed: e.target.checked });
+                                                    } catch (e2) {
+                                                      setErrMsg(e2 instanceof Error ? e2.message : "Failed.");
+                                                    }
+                                                  });
+                                                }}
+                                                className="mt-1 h-3.5 w-3.5 shrink-0 accent-emerald-600"
+                                              />
+                                              <div className="min-w-0 flex-1">
+                                                <div className={`text-sm font-medium ${step.completed ? "text-gray-400 line-through" : "text-gray-800"}`}>
+                                                  {step.title}
+                                                </div>
+                                                {step.description && (
+                                                  <div className="text-xs text-gray-400">{step.description}</div>
+                                                )}
+                                                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                                                  {step.target_date && <span>📅 {step.target_date}</span>}
+                                                  <span>order: {step.sort_order}</span>
+                                                </div>
+                                              </div>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setStepEditDrafts((prev) => ({
+                                                    ...prev,
+                                                    [step.id]: {
+                                                      title: step.title,
+                                                      description: step.description ?? "",
+                                                      target_date: step.target_date ?? "",
+                                                      sort_order: String(step.sort_order),
+                                                    },
+                                                  }));
+                                                  setEditingStepId(step.id);
+                                                }}
+                                                className="shrink-0 rounded-lg border border-blue-100 px-2 py-1 text-xs text-blue-500 transition hover:border-blue-300"
+                                              >
+                                                Edit
+                                              </button>
+                                              <button
+                                                type="button"
+                                                disabled={isPending}
+                                                onClick={() => {
+                                                  if (!playerId) return;
+                                                  if (!window.confirm(`Delete step "${step.title}"?`)) return;
+                                                  startTransition(async () => {
+                                                    try {
+                                                      await deleteStep(securityCode, playerId, g.id, step.id);
+                                                    } catch (e2) {
+                                                      setErrMsg(e2 instanceof Error ? e2.message : "Failed.");
+                                                    }
+                                                  });
+                                                }}
+                                                className="shrink-0 rounded-lg border border-red-100 px-2 py-1 text-xs text-red-500 transition hover:border-red-300 disabled:opacity-60"
+                                              >
+                                                ✕
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
 
-                <div className="mt-4 grid gap-4">
-                  <Field
-                    label="Session title"
-                    value={newSessionTitle}
-                    onChange={setNewSessionTitle}
-                    placeholder="e.g., Pre-Game Prep"
-                  />
-                  <Field
-                    label="Session date"
-                    value={newSessionDate}
-                    onChange={setNewSessionDate}
-                    type="date"
-                  />
-                  <TextArea
-                    label="Session plan"
-                    value={newSessionPlan}
-                    onChange={setNewSessionPlan}
-                    placeholder="What was planned for the session..."
-                  />
-                  <TextArea
-                    label="Focus areas"
-                    value={newSessionFocus}
-                    onChange={setNewSessionFocus}
-                    placeholder="Primary focus of the session..."
-                  />
-                  <TextArea
-                    label="Activities"
-                    value={newSessionActivities}
-                    onChange={setNewSessionActivities}
-                    placeholder="What was actually worked on..."
-                  />
-                  <TextArea
-                    label="Things to try"
-                    value={newSessionThingsToTry}
-                    onChange={setNewSessionThingsToTry}
-                    placeholder="New techniques or skills to practice..."
-                  />
-                  <TextArea
-                    label="Notes"
-                    value={newSessionNotes}
-                    onChange={setNewSessionNotes}
-                    placeholder="General notes about the session..."
-                  />
-                  <TextArea
-                    label="Admin notes (private)"
-                    value={newSessionAdminNotes}
-                    onChange={setNewSessionAdminNotes}
-                    placeholder="Your private coaching observations (never visible to parents)..."
-                  />
-                  <div className="rounded-2xl border border-emerald-200 bg-white p-4">
-                    <div className="text-sm font-semibold text-gray-900">
-                      Session PDF (optional)
-                    </div>
-                    <p className="mt-1 text-xs text-gray-600">
-                      Upload a PDF session plan instead of typing long notes.
-                    </p>
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <label className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300">
-                        <input
-                          type="file"
-                          accept="application/pdf,.pdf"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            void uploadSessionDocument(file, "new");
-                            e.currentTarget.value = "";
-                          }}
-                          disabled={newSessionUploadingDocument}
-                        />
-                        {newSessionUploadingDocument
-                          ? "Uploading PDF..."
-                          : "Upload PDF"}
-                      </label>
-                      {newSessionDocumentUrl && (
-                        <>
-                          <a
-                            href={newSessionDocumentUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs font-semibold text-emerald-700 hover:text-emerald-800"
-                          >
-                            View uploaded PDF
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => setNewSessionDocumentUrl("")}
-                            className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:border-gray-300"
-                          >
-                            Remove
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => {
-                      startTransition(async () => {
-                        try {
-                          if (!playerId) return;
-                          await createSession(securityCode, playerId);
-                          setMsg("Session created.");
-                        } catch (e) {
-                          setErrMsg(
-                            e instanceof Error
-                              ? e.message
-                              : "Failed to create session.",
-                          );
-                        }
-                      });
-                    }}
-                    className="rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-md disabled:opacity-50"
-                  >
-                    Save session
-                  </button>
-                </div>
-
-                {sessions.length > 0 && (
-                  <div className="mt-5 border-t border-emerald-200 pt-4">
-                    <div className="text-xs font-semibold text-gray-900">
-                      All sessions
-                    </div>
-                    <div className="mt-3 grid gap-2">
-                      {sessions
-                        .slice()
-                        .sort((a, b) => {
-                          // Sort by date descending (newest first)
-                          if (a.session_date !== b.session_date) {
-                            return b.session_date.localeCompare(a.session_date);
-                          }
-                          // If same date, sort by created_at descending
-                          return b.created_at.localeCompare(a.created_at);
-                        })
-                        .map((s) => {
-                          const isExpanded = expandedSessionIds.has(s.id);
-                          const toggleExpanded = () => {
-                            setExpandedSessionIds((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(s.id)) {
-                                next.delete(s.id);
-                              } else {
-                                next.add(s.id);
-                              }
-                              return next;
-                            });
-                          };
-
-                          return (
-                            <div
-                              key={s.id}
-                              className="rounded-2xl border border-emerald-200 bg-white px-4 py-3"
-                            >
-                              {editingSessionId === s.id ? (
-                                <div className="space-y-3">
-                                  <Field
-                                    label="Session title"
-                                    value={editSessionTitle}
-                                    onChange={setEditSessionTitle}
+                                {/* Add step */}
+                                <div className="mt-3 space-y-2 rounded-xl border border-dashed border-blue-200 p-3">
+                                  <div className="text-xs font-semibold text-gray-500">Add step</div>
+                                  <input
+                                    value={sd.title}
+                                    onChange={(e) => setNewStepDrafts((prev) => ({ ...prev, [g.id]: { ...sd, title: e.target.value } }))}
+                                    placeholder="Step title"
+                                    className="w-full rounded-xl border border-blue-200 bg-white px-3 py-1.5 text-sm text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
                                   />
-                                  <Field
-                                    label="Session date"
-                                    value={editSessionDate}
-                                    onChange={setEditSessionDate}
-                                    type="date"
+                                  <input
+                                    value={sd.description}
+                                    onChange={(e) => setNewStepDrafts((prev) => ({ ...prev, [g.id]: { ...sd, description: e.target.value } }))}
+                                    placeholder="Description (optional)"
+                                    className="w-full rounded-xl border border-blue-200 bg-white px-3 py-1.5 text-sm text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
                                   />
-                                  <TextArea
-                                    label="Session plan"
-                                    value={editSessionPlan}
-                                    onChange={setEditSessionPlan}
-                                  />
-                                  <TextArea
-                                    label="Focus areas"
-                                    value={editSessionFocus}
-                                    onChange={setEditSessionFocus}
-                                  />
-                                  <TextArea
-                                    label="Activities"
-                                    value={editSessionActivities}
-                                    onChange={setEditSessionActivities}
-                                  />
-                                  <TextArea
-                                    label="Things to try"
-                                    value={editSessionThingsToTry}
-                                    onChange={setEditSessionThingsToTry}
-                                  />
-                                  <TextArea
-                                    label="Notes"
-                                    value={editSessionNotes}
-                                    onChange={setEditSessionNotes}
-                                  />
-                                  <TextArea
-                                    label="Admin notes (private)"
-                                    value={editSessionAdminNotes}
-                                    onChange={setEditSessionAdminNotes}
-                                  />
-                                  <div className="rounded-2xl border border-emerald-200 bg-white p-4">
-                                    <div className="text-sm font-semibold text-gray-900">
-                                      Session PDF (optional)
+                                  <div className="grid gap-2 sm:grid-cols-2">
+                                    <div>
+                                      <label className="mb-0.5 block text-xs text-gray-400">Target date (optional)</label>
+                                      <input
+                                        type="date"
+                                        value={sd.target_date}
+                                        onChange={(e) => setNewStepDrafts((prev) => ({ ...prev, [g.id]: { ...sd, target_date: e.target.value } }))}
+                                        className="w-full rounded-xl border border-blue-200 bg-white px-3 py-1.5 text-sm text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+                                      />
                                     </div>
-                                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                                      <label className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300">
-                                        <input
-                                          type="file"
-                                          accept="application/pdf,.pdf"
-                                          className="hidden"
-                                          onChange={(e) => {
-                                            const file = e.target.files?.[0];
-                                            if (!file) return;
-                                            void uploadSessionDocument(
-                                              file,
-                                              "edit",
-                                            );
-                                            e.currentTarget.value = "";
-                                          }}
-                                          disabled={editSessionUploadingDocument}
-                                        />
-                                        {editSessionUploadingDocument
-                                          ? "Uploading PDF..."
-                                          : "Upload PDF"}
-                                      </label>
-                                      {editSessionDocumentUrl && (
-                                        <>
-                                          <a
-                                            href={editSessionDocumentUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-xs font-semibold text-emerald-700 hover:text-emerald-800"
-                                          >
-                                            View uploaded PDF
-                                          </a>
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setEditSessionDocumentUrl("")
-                                            }
-                                            className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:border-gray-300"
-                                          >
-                                            Remove
-                                          </button>
-                                        </>
-                                      )}
+                                    <div>
+                                      <label className="mb-0.5 block text-xs text-gray-400">Sort order</label>
+                                      <input
+                                        type="number"
+                                        value={sd.sort_order}
+                                        onChange={(e) => setNewStepDrafts((prev) => ({ ...prev, [g.id]: { ...sd, sort_order: e.target.value } }))}
+                                        className="w-full rounded-xl border border-blue-200 bg-white px-3 py-1.5 text-sm text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+                                      />
                                     </div>
                                   </div>
-
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={editSessionPublished}
-                                      onChange={(e) =>
-                                        setEditSessionPublished(
-                                          e.target.checked,
-                                        )
-                                      }
-                                      className="h-4 w-4 rounded border-emerald-200"
-                                    />
-                                    <label className="text-sm font-medium text-gray-700">
-                                      Published (visible to parents)
-                                    </label>
-                                  </div>
-
-                                  <div className="flex flex-wrap justify-end gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditingSessionId(null)}
-                                      className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
-                                    >
-                                      Cancel
-                                    </button>
+                                  <div className="flex justify-end">
                                     <button
                                       type="button"
                                       disabled={isPending}
                                       onClick={() => {
+                                        if (!playerId) return;
+                                        setMsg(null);
+                                        setErrMsg(null);
                                         startTransition(async () => {
                                           try {
-                                            if (!playerId) return;
-                                            await saveSession(
-                                              securityCode,
-                                              playerId,
-                                              s.id,
-                                            );
-                                            setMsg("Session updated.");
+                                            await createStep(securityCode, playerId, g.id);
+                                            setMsg("Step added.");
                                           } catch (e) {
-                                            setErrMsg(
-                                              e instanceof Error
-                                                ? e.message
-                                                : "Failed to update session.",
-                                            );
+                                            setErrMsg(e instanceof Error ? e.message : "Failed.");
                                           }
                                         });
                                       }}
-                                      className="rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:shadow-md disabled:opacity-50"
+                                      className="rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:opacity-70"
                                     >
-                                      Save
+                                      Add step
                                     </button>
                                   </div>
                                 </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  <div
-                                    className="flex items-start justify-between gap-3 cursor-pointer"
-                                    onClick={toggleExpanded}
-                                  >
-                                    <div className="flex items-start gap-2 flex-1">
-                                      <svg
-                                        className={`w-5 h-5 text-emerald-600 shrink-0 mt-0.5 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M9 5l7 7-7 7"
-                                        />
-                                      </svg>
-                                      <div>
-                                        <div className="text-sm font-semibold text-gray-900">
-                                          {s.title}
-                                        </div>
-                                        <div className="text-xs text-gray-500">
-                                          {s.session_date}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      {s.published ? (
-                                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                                          Published
-                                        </span>
-                                      ) : (
-                                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-                                          Draft
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  {isExpanded && (
-                                    <>
-                                      {s.session_plan && (
-                                        <div className="mt-2">
-                                          <div className="text-xs font-semibold text-gray-900">
-                                            Session plan
-                                          </div>
-                                          <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                                            {s.session_plan}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {s.focus_areas && (
-                                        <div className="mt-2">
-                                          <div className="text-xs font-semibold text-gray-900">
-                                            Focus areas
-                                          </div>
-                                          <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                                            {s.focus_areas}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {s.activities && (
-                                        <div className="mt-2">
-                                          <div className="text-xs font-semibold text-gray-900">
-                                            Activities
-                                          </div>
-                                          <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                                            {s.activities}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {s.things_to_try && (
-                                        <div className="mt-2">
-                                          <div className="text-xs font-semibold text-gray-900">
-                                            Things to try
-                                          </div>
-                                          <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                                            {s.things_to_try}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {s.notes && (
-                                        <div className="mt-2">
-                                          <div className="text-xs font-semibold text-gray-900">
-                                            Notes
-                                          </div>
-                                          <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                                            {s.notes}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {s.document_upload_url && (
-                                        <div className="mt-2">
-                                          <div className="text-xs font-semibold text-gray-900">
-                                            Session PDF
-                                          </div>
-                                          <a
-                                            href={s.document_upload_url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="mt-1 inline-block text-sm font-semibold text-emerald-700 hover:text-emerald-800"
-                                          >
-                                            Open PDF
-                                          </a>
-                                        </div>
-                                      )}
-
-                                      {s.admin_notes && (
-                                        <div className="mt-2">
-                                          <div className="text-xs font-semibold text-gray-900">
-                                            Admin notes (private)
-                                          </div>
-                                          <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                                            {s.admin_notes}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      <div className="mt-3 flex flex-wrap gap-2">
-                                        <button
-                                          type="button"
-                                          disabled={isPending}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            startTransition(async () => {
-                                              try {
-                                                if (!playerId) return;
-                                                await togglePublishSession(
-                                                  securityCode,
-                                                  playerId,
-                                                  s.id,
-                                                  s.published,
-                                                );
-                                                setMsg(
-                                                  s.published
-                                                    ? "Session unpublished."
-                                                    : "Session published.",
-                                                );
-                                              } catch (e) {
-                                                setErrMsg(
-                                                  e instanceof Error
-                                                    ? e.message
-                                                    : "Failed to update session.",
-                                                );
-                                              }
-                                            });
-                                          }}
-                                          className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
-                                            s.published
-                                              ? "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                                              : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100"
-                                          }`}
-                                        >
-                                          {s.published
-                                            ? "Unpublish"
-                                            : "Publish"}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setEditingSessionId(s.id);
-                                            setEditSessionTitle(s.title);
-                                            setEditSessionDate(s.session_date);
-                                            setEditSessionPlan(
-                                              s.session_plan ?? "",
-                                            );
-                                            setEditSessionFocus(
-                                              s.focus_areas ?? "",
-                                            );
-                                            setEditSessionActivities(
-                                              s.activities ?? "",
-                                            );
-                                            setEditSessionThingsToTry(
-                                              s.things_to_try ?? "",
-                                            );
-                                            setEditSessionNotes(s.notes ?? "");
-                                            setEditSessionAdminNotes(
-                                              s.admin_notes ?? "",
-                                            );
-                                            setEditSessionDocumentUrl(
-                                              s.document_upload_url ?? "",
-                                            );
-                                            setEditSessionPublished(
-                                              s.published,
-                                            );
-                                          }}
-                                          className="rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
-                                        >
-                                          Edit
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled={isPending}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (
-                                              !confirm(
-                                                "Are you sure you want to delete this session?",
-                                              )
-                                            )
-                                              return;
-                                            startTransition(async () => {
-                                              try {
-                                                if (!playerId) return;
-                                                await deleteSession(
-                                                  securityCode,
-                                                  playerId,
-                                                  s.id,
-                                                );
-                                                setMsg("Session deleted.");
-                                              } catch (e) {
-                                                setErrMsg(
-                                                  e instanceof Error
-                                                    ? e.message
-                                                    : "Failed to delete session.",
-                                                );
-                                              }
-                                            });
-                                          }}
-                                          className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:border-red-300 disabled:opacity-50"
-                                        >
-                                          Delete
-                                        </button>
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-                              )}
+                              </div>
                             </div>
-                          );
-                        })}
-                    </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
+
+              {/* Call Requests section */}
+              {callRequests.length > 0 && (
+                <div className="mt-8 rounded-3xl border border-indigo-200 bg-indigo-50 p-5">
+                  <div className="mb-4">
+                    <div className="text-sm font-semibold text-gray-900">Call Requests</div>
+                    <div className="mt-1 text-sm text-gray-600">
+                      Parent-requested calls for this player.
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {callRequests.map((cr) => (
+                      <div
+                        key={cr.id}
+                        className="rounded-2xl border border-indigo-200 bg-white p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                cr.status === "pending"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-gray-100 text-gray-600"
+                              }`}
+                            >
+                              {cr.status === "pending" ? "Pending" : "Seen"}
+                            </span>
+                            <span className="inline-flex rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
+                              {cr.duration_minutes} min
+                            </span>
+                          </div>
+                          {cr.status === "pending" && playerId && (
+                            <button
+                              type="button"
+                              disabled={isPending}
+                              onClick={() => {
+                                startTransition(async () => {
+                                  try {
+                                    await api(
+                                      `/api/admin/players/${playerId}/call-requests/${cr.id}`,
+                                      {
+                                        method: "PATCH",
+                                        securityCode,
+                                        body: JSON.stringify({ status: "seen" }),
+                                      }
+                                    );
+                                    await loadCallRequests(securityCode, playerId);
+                                  } catch (e) {
+                                    setErrMsg(e instanceof Error ? e.message : "Failed.");
+                                  }
+                                });
+                              }}
+                              className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60"
+                            >
+                              Mark Seen
+                            </button>
+                          )}
+                        </div>
+                        <p className="mt-2 text-sm text-gray-700">{cr.availability}</p>
+                        {cr.notes && (
+                          <p className="mt-1 text-xs text-gray-500 italic">{cr.notes}</p>
+                        )}
+                        <div className="mt-3 flex items-center gap-3 flex-wrap">
+                          <a
+                            href={`mailto:${cr.parent_email}`}
+                            className="text-xs font-medium text-indigo-600 underline underline-offset-2 hover:text-indigo-700"
+                          >
+                            {cr.parent_email}
+                          </a>
+                          {cr.parent_phone && (
+                            <a
+                              href={`tel:${cr.parent_phone}`}
+                              className="text-xs font-medium text-indigo-600 underline underline-offset-2 hover:text-indigo-700"
+                            >
+                              {cr.parent_phone}
+                            </a>
+                          )}
+                          <span className="text-xs text-gray-400 ml-auto">
+                            {new Date(cr.created_at).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
                 <button
@@ -2864,17 +1993,6 @@ export default function AdminPlayerClient(props: {
                       setErrMsg("Name is required.");
                       return;
                     }
-                    const developmentChanged = hasFieldChanges(
-                      player,
-                      draft,
-                      DEVELOPMENT_NOTE_FIELDS,
-                    );
-                    const skillsChanged = hasFieldChanges(
-                      player,
-                      draft,
-                      SKILL_FIELDS,
-                    );
-
                     startTransition(async () => {
                       try {
                         const data = await api<{ player: Player }>(
@@ -2921,8 +2039,6 @@ export default function AdminPlayerClient(props: {
                         );
                         setPlayer(data.player);
                         setDraft(data.player);
-                        if (developmentChanged) markChecklistStepDone("development");
-                        if (skillsChanged) markChecklistStepDone("skills");
                         setMsg("Saved.");
                       } catch (e) {
                         setErrMsg(
@@ -2938,10 +2054,6 @@ export default function AdminPlayerClient(props: {
               </div>
 
               <div className="mt-8">
-                <PinnedVideos playerId={playerId ?? ""} />
-              </div>
-
-              <div className="mt-8">
                 <ContentSubmissionsSection
                   playerId={playerId ?? ""}
                   submissions={contentSubmissions}
@@ -2950,10 +2062,7 @@ export default function AdminPlayerClient(props: {
                     await loadPlayer(securityCode, playerId);
                     await loadTests(securityCode, playerId);
                     await loadProfiles(securityCode, playerId);
-                    await loadGoals(securityCode, playerId);
-                    await loadSessions(securityCode, playerId);
                     await loadContentSubmissions(securityCode, playerId);
-                    await loadFeedback(securityCode, playerId);
                   }}
                 />
               </div>
@@ -2967,16 +2076,6 @@ export default function AdminPlayerClient(props: {
                 <p className="mt-1 text-sm text-gray-600">
                   Create a test entry for this player.
                 </p>
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    onClick={openEndSessionChecklist}
-                    className="w-full rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-100"
-                  >
-                    End of Session Checklist
-                  </button>
-                </div>
-
                 <div className="mt-5 grid gap-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-gray-700">

@@ -679,6 +679,25 @@ const DERIVED_METRICS_BY_TEST: Record<string, DerivedMetric[]> = {
   ],
 };
 
+const TEST_DESCRIPTIONS: Record<string, string> = {
+  Power:
+    "Measures shot speed in MPH. Players shoot with both strong and weak foot to see power on each side.",
+  "Serve Distance":
+    "Measures how far a ball travels through the air on both feet. Tests pure kicking distance.",
+  "Figure 8 Loops":
+    "Dribbling technique through cones in a figure-8 with strong, weak, and both feet for 1 minute. Scored in loops — 100 = 1 full lap, 150 = 1½ laps, etc.",
+  "Passing Gates":
+    "How many passes a player can make through a gate in 60 seconds at up to 10 yards. Tests accuracy and consistency.",
+  "Skill Moves":
+    "Coach-rated mastery of individual skill moves on a 1–5 scale. 1 = just learning, 5 = fully mastered.",
+  "5-10-5 Agility":
+    "Timed change-of-direction drill in seconds. Tests how quickly a player can turn and accelerate in different directions.",
+  Juggling:
+    "4 attempts, scored as level + touches (e.g. 105 = level 1 with 5 juggles, 204 = level 2 with 4 juggles). Best two attempts are summed.",
+  "Single-leg Hop":
+    "Explosive single-leg hop for distance. Score is in feet and inches — 5.2 means 5 feet 2 inches.",
+};
+
 function InfoTip({ text }: { text: string }) {
   return (
     <span className="relative inline-flex">
@@ -1000,6 +1019,7 @@ export function PlayerInsights({
   const [tests, setTests] = useState<PlayerTest[]>([]);
   const [loading, setLoading] = useState(true);
   const lastAppliedTargetRef = useRef<string | null>(null);
+  const [filterTest, setFilterTest] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1070,6 +1090,14 @@ export function PlayerInsights({
     return map;
   }, [rawTests, tests]);
 
+  const availableTestNames = useMemo(
+    () =>
+      TEST_DEFINITIONS.filter((d) => latestByTestName.has(d.name)).map(
+        (d) => d.name
+      ),
+    [latestByTestName]
+  );
+
   useEffect(() => {
     if (!targetTestId) {
       lastAppliedTargetRef.current = null;
@@ -1119,13 +1147,46 @@ export function PlayerInsights({
           Showing the latest entry for each test.
         </p>
 
+        {availableTestNames.length > 1 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setFilterTest(null)}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                filterTest === null
+                  ? "bg-emerald-600 text-white"
+                  : "border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+              }`}
+            >
+              All tests
+            </button>
+            {availableTestNames.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => setFilterTest(name === filterTest ? null : name)}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  filterTest === name
+                    ? "bg-emerald-600 text-white"
+                    : "border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                }`}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
+
         {tests.length === 0 && rawTests.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-gray-600">
             No tests recorded yet.
           </div>
         ) : (
           <div className="mt-4 grid gap-4">
-            {TEST_DEFINITIONS.map((def) => {
+            {(filterTest
+              ? TEST_DEFINITIONS.filter((d) => d.name === filterTest)
+              : TEST_DEFINITIONS
+            ).map((def) => {
               const t = latestByTestName.get(def.name);
               if (!t) return null;
 
@@ -1170,15 +1231,20 @@ export function PlayerInsights({
                   className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold text-gray-900">
                         {def.name}
                       </div>
-                      <div className="mt-1 text-sm text-gray-600">
+                      <div className="mt-0.5 text-xs text-gray-400">
                         {t.test_date}
                       </div>
+                      {TEST_DESCRIPTIONS[def.name] && (
+                        <p className="mt-2 text-xs leading-relaxed text-gray-500">
+                          {TEST_DESCRIPTIONS[def.name]}
+                        </p>
+                      )}
                     </div>
-                    <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    <div className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
                       Latest
                     </div>
                   </div>

@@ -20,6 +20,10 @@ type Player = {
   profile_photo_url: string | null;
 };
 
+function isBlank(value: string | null | undefined) {
+  return !String(value ?? "").trim();
+}
+
 function Field({
   label,
   value,
@@ -28,6 +32,7 @@ function Field({
   type = "text",
   disabled = false,
   helperText,
+  requiredMissing = false,
 }: {
   label: string;
   value: string;
@@ -36,19 +41,34 @@ function Field({
   type?: string;
   disabled?: boolean;
   helperText?: string;
+  requiredMissing?: boolean;
 }) {
+  const inputClass = requiredMissing
+    ? "border-red-300 bg-red-50/40 focus:border-red-400 focus:ring-red-50"
+    : "border-emerald-200 bg-white focus:border-emerald-300 focus:ring-emerald-50";
+
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-gray-700">{label}</label>
+      <label
+        className={`text-sm font-medium ${
+          requiredMissing ? "text-red-700" : "text-gray-700"
+        }`}
+      >
+        {label}
+      </label>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         type={type}
         disabled={disabled}
-        className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 placeholder:text-gray-500 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+        className={`w-full rounded-xl border px-3 py-2 text-gray-800 placeholder:text-gray-500 outline-none transition focus:ring-4 ${inputClass}`}
       />
-      {helperText ? <p className="text-xs text-gray-500">{helperText}</p> : null}
+      {helperText ? (
+        <p className={`text-xs ${requiredMissing ? "text-red-700" : "text-gray-500"}`}>
+          {helperText}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -59,24 +79,40 @@ function TextArea({
   onChange,
   placeholder,
   helperText,
+  requiredMissing = false,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   helperText?: string;
+  requiredMissing?: boolean;
 }) {
+  const inputClass = requiredMissing
+    ? "border-red-300 bg-red-50/40 focus:border-red-400 focus:ring-red-50"
+    : "border-emerald-200 bg-white focus:border-emerald-300 focus:ring-emerald-50";
+
   return (
     <div className="space-y-1.5 sm:col-span-2">
-      <label className="text-sm font-medium text-gray-700">{label}</label>
+      <label
+        className={`text-sm font-medium ${
+          requiredMissing ? "text-red-700" : "text-gray-700"
+        }`}
+      >
+        {label}
+      </label>
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={3}
-        className="w-full resize-y rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 placeholder:text-gray-500 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+        className={`w-full resize-y rounded-xl border px-3 py-2 text-gray-800 placeholder:text-gray-500 outline-none transition focus:ring-4 ${inputClass}`}
       />
-      {helperText ? <p className="text-xs text-gray-500">{helperText}</p> : null}
+      {helperText ? (
+        <p className={`text-xs ${requiredMissing ? "text-red-700" : "text-gray-500"}`}>
+          {helperText}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -113,8 +149,25 @@ export function PlayerEditor(props: { player: Player }) {
     return { age, birthYear, ageGroup };
   }, [draft.birthdate]);
 
+  const missing = {
+    name: isBlank(draft.name),
+    teamLevel: isBlank(draft.team_level),
+    birthdate: isBlank(draft.birthdate),
+    dominantFoot: isBlank(draft.dominant_foot),
+    shirtSize: isBlank(draft.shirt_size),
+    location: isBlank(draft.location),
+  };
+
+  const hasAnyMissing = Object.values(missing).some(Boolean);
+
   return (
     <div>
+      {hasAnyMissing && (
+        <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          Some required fields are missing — fill them in below and save.
+        </div>
+      )}
+
       {/* Photo upload section */}
       <div className="mb-6 flex items-center gap-4">
         {/* Photo display */}
@@ -231,6 +284,8 @@ export function PlayerEditor(props: { player: Player }) {
             setDraft((p) => ({ ...p, name: v }));
           }}
           placeholder="Player name"
+          requiredMissing={missing.name}
+          helperText={missing.name ? "Needs to be put in." : undefined}
         />
         <Field
           label="Team / level"
@@ -241,6 +296,8 @@ export function PlayerEditor(props: { player: Player }) {
             setDraft((p) => ({ ...p, team_level: v || null }));
           }}
           placeholder="Team / level"
+          requiredMissing={missing.teamLevel}
+          helperText={missing.teamLevel ? "Needs to be put in." : undefined}
         />
         <Field
           label="Birthday"
@@ -252,6 +309,8 @@ export function PlayerEditor(props: { player: Player }) {
           }}
           type="date"
           placeholder="YYYY-MM-DD"
+          requiredMissing={missing.birthdate}
+          helperText={missing.birthdate ? "Needs to be put in." : undefined}
         />
         <Field
           label="Computed (age / birth year / age group)"
@@ -295,6 +354,8 @@ export function PlayerEditor(props: { player: Player }) {
             setDraft((p) => ({ ...p, dominant_foot: v || null }));
           }}
           placeholder="Right / Left / Both"
+          requiredMissing={missing.dominantFoot}
+          helperText={missing.dominantFoot ? "Needs to be put in." : undefined}
         />
         <Field
           label="Shirt size"
@@ -305,6 +366,8 @@ export function PlayerEditor(props: { player: Player }) {
             setDraft((p) => ({ ...p, shirt_size: v || null }));
           }}
           placeholder="e.g. Youth M"
+          requiredMissing={missing.shirtSize}
+          helperText={missing.shirtSize ? "Needs to be put in." : undefined}
         />
         <TextArea
           label="Location"
@@ -315,7 +378,12 @@ export function PlayerEditor(props: { player: Player }) {
             setDraft((p) => ({ ...p, location: v || null }));
           }}
           placeholder="City, area, or general side of town"
-          helperText="Doesn’t have to be exact. Just enough to help the coach understand travel distance."
+          requiredMissing={missing.location}
+          helperText={
+            missing.location
+              ? "Needs to be put in. General area is enough."
+              : "Doesn’t have to be exact. Just enough to help the coach understand travel distance."
+          }
         />
       </div>
 

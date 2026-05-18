@@ -4,12 +4,22 @@ import { assertAdmin } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
 
+type RatingRow = {
+  avg_rating: string;
+  rating_count: string;
+  one_star: string;
+  two_star: string;
+  three_star: string;
+  four_star: string;
+  five_star: string;
+};
+
 export async function GET(req: NextRequest) {
   const err = await assertAdmin(req);
   if (err) return err;
 
   try {
-    const ratingsRaw = await sql`
+    const ratingsRaw = (await sql`
       SELECT
         v.id as video_id,
         v.title as video_title,
@@ -27,10 +37,10 @@ export async function GET(req: NextRequest) {
       WHERE ve.rating_stars IS NOT NULL
       GROUP BY v.id, v.title, v.video_url, v.category
       ORDER BY avg_rating DESC, rating_count DESC
-    `;
+    `) as unknown as RatingRow[];
 
     // Convert numeric fields from strings to numbers
-    const ratings = ratingsRaw.map((r: any) => ({
+    const ratings = ratingsRaw.map((r) => ({
       ...r,
       avg_rating: parseFloat(r.avg_rating),
       rating_count: parseInt(r.rating_count),

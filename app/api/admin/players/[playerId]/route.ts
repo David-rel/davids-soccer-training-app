@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 
 import { assertAdmin } from "@/lib/adminAuth";
 import { sql } from "@/db";
+import { getPlayerContact, fireAdminSms } from "@/lib/adminSms";
 
 type PlayerRow = {
   id: string;
@@ -324,6 +325,15 @@ export async function PATCH(
 
   const player = rows[0];
   if (!player) return new Response("Not found", { status: 404 });
+
+  const contact = await getPlayerContact(playerId);
+  if (contact?.phone) {
+    const appUrl = process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
+    fireAdminSms(
+      contact.phone,
+      `Hi! Coach David just updated ${contact.player_name}'s profile. View it here: ${appUrl}/player/${playerId}`
+    );
+  }
 
   return Response.json({ player });
 }

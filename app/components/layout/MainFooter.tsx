@@ -10,7 +10,7 @@ export default function MainFooter() {
           />
         </div>
         <p className="text-emerald-100 mb-2">
-          © 2025 David’s Soccer Training. All rights reserved.
+          © 2026 David’s Soccer Training. All rights reserved.
         </p>
         <p className="text-emerald-200 text-sm">
           Private soccer training in Gilbert and Mesa for ages 8–16.

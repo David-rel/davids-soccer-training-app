@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { assertAdmin } from "@/lib/adminAuth";
 import { sql } from "@/db";
 import { getTestDefinitionByName } from "@/lib/testDefinitions";
+import { getPlayerContact, fireAdminSms } from "@/lib/adminSms";
 
 type PlayerTestRow = {
   id: string;
@@ -168,5 +169,16 @@ export async function POST(
       updated_at
   `) as unknown as PlayerTestRow[];
 
-  return Response.json({ test: rows[0] }, { status: 201 });
+  const test = rows[0];
+
+  const contact = await getPlayerContact(playerId);
+  if (contact?.phone) {
+    const appUrl = process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
+    fireAdminSms(
+      contact.phone,
+      `Hi! Coach David just added a new ${testName} test for ${contact.player_name}. View their progress: ${appUrl}/player/${playerId}/progress`
+    );
+  }
+
+  return Response.json({ test }, { status: 201 });
 }

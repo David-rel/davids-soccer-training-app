@@ -1,36 +1,13 @@
 import { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { put } from "@vercel/blob";
 import { sql } from "@/db";
 import { sendNewContentSubmissionEmail } from "@/lib/email";
+import { sendSmsViaTwilio } from "@/lib/twilio";
+import { assertOwnsPlayer } from "@/lib/assertOwnsPlayer";
 
 // Configure route to accept large file uploads
 export const maxDuration = 60; // Allow up to 60 seconds for upload
 export const dynamic = "force-dynamic";
-
-async function assertOwnsPlayer(req: NextRequest, playerId: string) {
-  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
-  const parentId = token?.sub;
-  if (!parentId)
-    return {
-      ok: false as const,
-      res: new Response("Unauthorized", { status: 401 }),
-    };
-
-  const owns = (await sql`
-    SELECT 1
-    FROM players
-    WHERE id = ${playerId} AND parent_id = ${parentId}
-    LIMIT 1
-  `) as unknown as Array<{ "?column?": number }>;
-
-  if (owns.length === 0)
-    return {
-      ok: false as const,
-      res: new Response("Not found", { status: 404 }),
-    };
-  return { ok: true as const, parentId };
-}
 
 type UploadRow = {
   id: string;
@@ -201,6 +178,10 @@ export async function POST(
           adminReviewUrl: `${baseUrl}/admin/player/${playerId}#content-submissions`,
           description: upload.description,
         });
+        await sendSmsViaTwilio(
+          `📹 ${player.name} uploaded a clip for review. Check: ${baseUrl}/admin/player/${playerId}#content-submissions`,
+          { to: "+17206122979" }
+        ).catch(() => {});
       }
     } catch (emailError) {
       console.error("Failed to send email notification:", emailError);
