@@ -211,23 +211,16 @@ export async function POST(req: NextRequest) {
     return `${h12}:${m} ${ampm}`;
   };
 
-  // Fire-and-forget SMS to admin
-  Promise.resolve()
-    .then(async () => {
-      try {
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-        await sendSmsViaTwilio(
-          `📅 Session request from ${parent_name.trim()} for ${player_name.trim()}.\n` +
-          `Slot: ${slotDateLabel} ${fmt(slot_start)} – ${fmt(slot_end)}.\n` +
-          `Phone: ${phone ?? "—"}  Email: ${email ?? "—"}.\n` +
-          `Review: ${baseUrl}/admin/booking-requests`,
-          { to: "+17206122979" }
-        ).catch(() => {});
-      } catch {
-        // ignore
-      }
-    })
-    .catch(() => {});
+  // Send SMS before returning — fire-and-forget inside serverless kills the
+  // function after the response is sent, so we await here and swallow errors.
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+  await sendSmsViaTwilio(
+    `📅 Session request from ${parent_name.trim()} for ${player_name.trim()}.\n` +
+    `Slot: ${slotDateLabel} ${fmt(slot_start)} – ${fmt(slot_end)}.\n` +
+    `Phone: ${phone ?? "—"}  Email: ${email ?? "—"}.\n` +
+    `Review: ${baseUrl}/admin/booking-requests`,
+    { to: "+17206122979" }
+  ).catch(() => {});
 
   return Response.json({ request }, { status: 201 });
 }
