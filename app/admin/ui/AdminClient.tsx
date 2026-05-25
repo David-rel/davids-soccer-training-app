@@ -100,8 +100,7 @@ export default function AdminClient() {
   const [newParentEmail, setNewParentEmail] = useState("");
   const [newParentPhone, setNewParentPhone] = useState("");
   const [newParentCrmId, setNewParentCrmId] = useState("");
-  const [newParentPassword, setNewParentPassword] = useState("");
-  const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
+  const [createParentNotice, setCreateParentNotice] = useState<string | null>(null);
 
   // Create player
   const [selectedParentId, setSelectedParentId] = useState<string>("");
@@ -134,17 +133,6 @@ export default function AdminClient() {
     if (age < 0 || age > 120) age = 0;
     const ageGroup = age ? `U${age}` : null;
     return { age, birthYear, ageGroup };
-  }
-
-  function generateSecurePassword(length = 20) {
-    // Avoid ambiguous characters; still high entropy.
-    const alphabet =
-      "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*_-+=";
-    const bytes = new Uint8Array(length);
-    crypto.getRandomValues(bytes);
-    let out = "";
-    for (const b of bytes) out += alphabet[b % alphabet.length];
-    return out;
   }
 
   async function verify(code: string) {
@@ -336,11 +324,17 @@ export default function AdminClient() {
                   Create parent
                 </h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  Email or phone is required. Password is stored as a bcrypt
-                  hash.
+                  Phone is required. A setup link will be texted to the parent
+                  so they can create their own password.
                 </p>
 
                 <div className="mt-6 grid gap-4">
+                  <Field
+                    label="Phone (required)"
+                    value={newParentPhone}
+                    onChange={setNewParentPhone}
+                    placeholder="+15555555555"
+                  />
                   <Field
                     label="Email (optional)"
                     value={newParentEmail}
@@ -348,71 +342,47 @@ export default function AdminClient() {
                     placeholder="parent@example.com"
                   />
                   <Field
-                    label="Phone (optional)"
-                    value={newParentPhone}
-                    onChange={setNewParentPhone}
-                    placeholder="+15555555555"
-                  />
-                  <Field
                     label="CRM Parent ID (optional)"
                     value={newParentCrmId}
                     onChange={setNewParentCrmId}
                     placeholder="e.g. 14"
                   />
-                  <Field
-                    label="Password"
-                    value={newParentPassword}
-                    onChange={(v) => {
-                      setPasswordNotice(null);
-                      setNewParentPassword(v);
-                    }}
-                    type="password"
-                    placeholder="••••••••"
-                  />
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const pw = generateSecurePassword(20);
-                        setNewParentPassword(pw);
-                        try {
-                          await navigator.clipboard.writeText(pw);
-                          setPasswordNotice("Generated & copied to clipboard.");
-                        } catch {
-                          setPasswordNotice(
-                            "Generated (copy failed — select and copy manually)."
-                          );
-                        }
-                      }}
-                      className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300"
-                    >
-                      Generate secure password
-                    </button>
-                    {passwordNotice && (
-                      <div className="text-xs text-gray-600">
-                        {passwordNotice}
-                      </div>
-                    )}
-                  </div>
+                  {createParentNotice && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                      {createParentNotice}
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={async () => {
                       setErrMsg(null);
+                      setCreateParentNotice(null);
                       try {
-                        await api<{ parent: Parent }>("/api/admin/parents", {
+                        const result = await api<{
+                          parent: Parent;
+                          smsSent: boolean;
+                          smsError: string | null;
+                        }>("/api/admin/parents", {
                           method: "POST",
                           securityCode,
                           body: JSON.stringify({
                             email: newParentEmail || undefined,
                             phone: newParentPhone || undefined,
                             crm_parent_id: newParentCrmId || undefined,
-                            password: newParentPassword,
                           }),
                         });
                         setNewParentEmail("");
                         setNewParentPhone("");
                         setNewParentCrmId("");
-                        setNewParentPassword("");
+                        if (result.smsSent) {
+                          setCreateParentNotice(
+                            "Parent created — setup link sent via SMS."
+                          );
+                        } else {
+                          setCreateParentNotice(
+                            `Parent created — SMS failed: ${result.smsError ?? "unknown error"}`
+                          );
+                        }
                         await refreshAll(securityCode);
                       } catch (e) {
                         setErrMsg(
@@ -424,7 +394,7 @@ export default function AdminClient() {
                     }}
                     className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
                   >
-                    Create parent
+                    Create parent & send setup link
                   </button>
                 </div>
               </div>

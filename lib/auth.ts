@@ -44,7 +44,7 @@ export const authOptions: NextAuthOptions = {
             `) as unknown as ParentRow[];
 
         const parent = rows[0];
-        if (!parent) return null;
+        if (!parent || !parent.password_hash) return null;
 
         const ok = await bcrypt.compare(password, parent.password_hash);
         if (!ok) return null;

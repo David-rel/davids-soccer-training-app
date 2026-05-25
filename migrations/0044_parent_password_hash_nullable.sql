@@ -1,0 +1,1 @@
+ALTER TABLE parents ALTER COLUMN password_hash DROP NOT NULL;

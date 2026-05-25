@@ -56,15 +56,6 @@ function labelForParent(p: Parent) {
   return p.name ?? p.email ?? p.phone ?? p.id;
 }
 
-function generateSecurePassword(length = 20) {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*_-+=";
-  const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
-  let out = "";
-  for (const b of bytes) out += alphabet[b % alphabet.length];
-  return out;
-}
-
 export default function AccountsClient() {
   const [parents, setParents] = useState<Parent[]>([]);
   const [crmParents, setCrmParents] = useState<CrmParent[]>([]);
@@ -79,8 +70,8 @@ export default function AccountsClient() {
   const [newSecondaryParentName, setNewSecondaryParentName] = useState("");
   const [newParentEmail, setNewParentEmail] = useState("");
   const [newParentPhone, setNewParentPhone] = useState("");
-  const [newParentPassword, setNewParentPassword] = useState("");
-  const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
+  const [createParentNotice, setCreateParentNotice] = useState<string | null>(null);
+  const [sendSms, setSendSms] = useState(true);
   const [creatingParent, setCreatingParent] = useState(false);
 
   // Create player form
@@ -189,9 +180,10 @@ export default function AccountsClient() {
   async function createParent() {
     if (!selectedCrmParentId) { setError("Select a CRM parent first."); return; }
     setError(null);
+    setCreateParentNotice(null);
     setCreatingParent(true);
     try {
-      await api<{ parent: Parent }>("/api/admin/parents", {
+      const result = await api<{ parent: Parent; smsSent: boolean; smsError: string | null }>("/api/admin/parents", {
         method: "POST",
         body: JSON.stringify({
           crm_parent_id: selectedCrmParentId,
@@ -199,15 +191,19 @@ export default function AccountsClient() {
           secondary_parent_name: newSecondaryParentName || undefined,
           email: newParentEmail || undefined,
           phone: newParentPhone || undefined,
-          password: newParentPassword,
+          send_sms: sendSms,
         }),
       });
       setNewParentName("");
       setNewSecondaryParentName("");
       setNewParentEmail("");
       setNewParentPhone("");
-      setNewParentPassword("");
       setSelectedCrmParentId("");
+      if (result.smsSent) {
+        setCreateParentNotice("Account created — setup link sent via SMS.");
+      } else {
+        setCreateParentNotice(`Account created — SMS failed: ${result.smsError ?? "unknown error"}`);
+      }
       await loadAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create parent.");
@@ -277,7 +273,7 @@ export default function AccountsClient() {
           {/* Add New Parent */}
           <section className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
             <h2 className="text-base font-bold text-gray-900">Add New Parent</h2>
-            <p className="mt-0.5 text-sm text-gray-500">Link a CRM parent to create their login account.</p>
+            <p className="mt-0.5 text-sm text-gray-500">Link a CRM parent to create their account. A setup link will be texted to them so they can set their own password.</p>
             <div className="mt-4 space-y-3">
               <select
                 value={selectedCrmParentId}
@@ -302,31 +298,12 @@ export default function AccountsClient() {
 
               <input value={newParentName} onChange={(e) => setNewParentName(e.target.value)} placeholder="Parent name" className="w-full rounded-xl border border-emerald-200 px-3 py-2 text-sm outline-none focus:border-emerald-400" />
               <input value={newSecondaryParentName} onChange={(e) => setNewSecondaryParentName(e.target.value)} placeholder="Second parent name (optional)" className="w-full rounded-xl border border-emerald-200 px-3 py-2 text-sm outline-none focus:border-emerald-400" />
-              <input value={newParentEmail} onChange={(e) => setNewParentEmail(e.target.value)} placeholder="Email" className="w-full rounded-xl border border-emerald-200 px-3 py-2 text-sm outline-none focus:border-emerald-400" />
-              <input value={newParentPhone} onChange={(e) => setNewParentPhone(e.target.value)} placeholder="Phone (optional)" className="w-full rounded-xl border border-emerald-200 px-3 py-2 text-sm outline-none focus:border-emerald-400" />
+              <input value={newParentEmail} onChange={(e) => setNewParentEmail(e.target.value)} placeholder="Email (optional)" className="w-full rounded-xl border border-emerald-200 px-3 py-2 text-sm outline-none focus:border-emerald-400" />
+              <input value={newParentPhone} onChange={(e) => setNewParentPhone(e.target.value)} placeholder="Phone (required for SMS)" className="w-full rounded-xl border border-emerald-200 px-3 py-2 text-sm outline-none focus:border-emerald-400" />
 
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  value={newParentPassword}
-                  onChange={(e) => { setPasswordNotice(null); setNewParentPassword(e.target.value); }}
-                  placeholder="Password"
-                  className="flex-1 rounded-xl border border-emerald-200 px-3 py-2 text-sm outline-none focus:border-emerald-400"
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const pw = generateSecurePassword();
-                    setNewParentPassword(pw);
-                    try { await navigator.clipboard.writeText(pw); setPasswordNotice("Copied!"); }
-                    catch { setPasswordNotice("Generated"); }
-                  }}
-                  className="shrink-0 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:border-emerald-300"
-                >
-                  Generate
-                </button>
-              </div>
-              {passwordNotice && <p className="text-xs text-emerald-600">{passwordNotice}</p>}
+              {createParentNotice && (
+                <p className="text-xs text-emerald-700 font-medium">{createParentNotice}</p>
+              )}
               {unlinkedCrmParents.length === 0 && (
                 <p className="text-xs text-gray-500">All CRM parents are already linked.</p>
               )}
@@ -336,7 +313,7 @@ export default function AccountsClient() {
                 disabled={!selectedCrmParentId || creatingParent}
                 className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
               >
-                {creatingParent ? "Creating…" : "Create parent account"}
+                {creatingParent ? "Creating…" : "Create account & send setup link"}
               </button>
             </div>
           </section>

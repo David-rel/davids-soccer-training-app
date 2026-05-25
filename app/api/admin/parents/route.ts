@@ -1,9 +1,10 @@
 import { NextRequest } from "next/server";
-import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 import { assertAdmin } from "@/lib/adminAuth";
 import { sql } from "@/db";
 import { normalizePhoneForLookup, normalizePhoneForStorage } from "@/lib/phone";
+import { sendSmsViaTwilio } from "@/lib/twilio";
 
 type ParentRow = {
   id: string;
@@ -63,8 +64,8 @@ export async function POST(req: NextRequest) {
     secondary_parent_name?: string;
     email?: string;
     phone?: string;
-    password?: string;
     crm_parent_id?: number | string | null;
+    send_sms?: boolean;
   } | null;
 
   const crmParentId = parseOptionalPositiveInt(body?.crm_parent_id);
@@ -73,8 +74,6 @@ export async function POST(req: NextRequest) {
       status: 400,
     });
   }
-
-  const password = String(body?.password ?? "");
 
   let crmParent: CrmParentRow | null = null;
   if (crmParentId !== null) {
@@ -132,10 +131,11 @@ export async function POST(req: NextRequest) {
   if (!email && !phone) {
     return new Response("Email or phone is required.", { status: 400 });
   }
-  if (!password || password.length < 6) {
-    return new Response("Password must be at least 6 characters.", {
-      status: 400,
-    });
+  if (!phone) {
+    return new Response(
+      "A phone number is required to send the setup link via SMS.",
+      { status: 400 }
+    );
   }
 
   if (email) {
@@ -165,7 +165,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const signupToken = crypto.randomUUID();
+  const signupTokenExpiresAt = new Date(
+    Date.now() + 30 * 24 * 60 * 60 * 1000
+  ).toISOString();
 
   const rows = (await sql`
     INSERT INTO parents (
@@ -173,16 +176,18 @@ export async function POST(req: NextRequest) {
       secondary_parent_name,
       email,
       phone,
-      password_hash,
-      crm_parent_id
+      crm_parent_id,
+      signup_token,
+      signup_token_expires_at
     )
     VALUES (
       ${name},
       ${secondaryParentName},
       ${email},
       ${phone},
-      ${passwordHash},
-      ${crmParentId}
+      ${crmParentId},
+      ${signupToken}::uuid,
+      ${signupTokenExpiresAt}::timestamptz
     )
     RETURNING
       id,
@@ -195,5 +200,29 @@ export async function POST(req: NextRequest) {
       updated_at
   `) as unknown as ParentRow[];
 
-  return Response.json({ parent: rows[0] }, { status: 201 });
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+    process.env.NEXTAUTH_URL ||
+    "http://localhost:3000";
+  const setupUrl = `${baseUrl}/setup/${signupToken}`;
+  const smsBody =
+    `Coach David has made your training account, click below to view and set it up ` +
+    `(if you did not want this please ignore): ${setupUrl}`;
+
+  let smsSent = false;
+  let smsError: string | null = null;
+  if (body?.send_sms !== false) {
+    try {
+      await sendSmsViaTwilio(smsBody, { to: phone });
+      smsSent = true;
+    } catch (e) {
+      smsError = e instanceof Error ? e.message : "SMS failed";
+    }
+  }
+
+  return Response.json(
+    { parent: rows[0], smsSent, smsError },
+    { status: 201 }
+  );
 }

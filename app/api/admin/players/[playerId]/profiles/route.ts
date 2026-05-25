@@ -7,6 +7,7 @@ import {
   type PlayerProfileData,
   type PlayerTestRow,
 } from "@/lib/computePlayerProfile";
+import { getPlayerContact, fireAdminSms } from "@/lib/adminSms";
 
 type PlayerProfileRow = {
   id: string;
@@ -110,6 +111,19 @@ export async function POST(
       created_at,
       updated_at
   `) as unknown as PlayerProfileRow[];
+
+  const contact = await getPlayerContact(playerId);
+  if (contact?.phone) {
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      process.env.NEXTAUTH_URL ||
+      "";
+    fireAdminSms(
+      contact.phone,
+      `Hi! Coach David has added new test data for ${contact.player_name}. View their updated stats: ${appUrl}/player/${playerId}/progress`
+    );
+  }
 
   return Response.json({ profile: inserted[0] }, { status: 201 });
 }
