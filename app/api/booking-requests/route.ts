@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
     SELECT 1 FROM session_booking_requests
     WHERE slot_date = ${slot_date}::date
       AND slot_start = ${slot_start}::time
-      AND status IN ('pending', 'confirmed')
+      AND status IN ('pending', 'confirmed', 'blocked')
     LIMIT 1
   `) as unknown as Array<unknown>;
 

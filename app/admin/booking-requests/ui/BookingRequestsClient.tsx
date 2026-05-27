@@ -13,7 +13,7 @@ export type BookingRequest = {
   slot_start: string;
   slot_end: string;
   notes: string | null;
-  status: "pending" | "confirmed" | "cancelled";
+  status: "pending" | "confirmed" | "cancelled" | "blocked";
   created_at: string;
 };
 
@@ -38,6 +38,7 @@ const statusBadge: Record<string, string> = {
   pending: "bg-yellow-50 text-yellow-700 border-yellow-200",
   confirmed: "bg-emerald-50 text-emerald-700 border-emerald-200",
   cancelled: "bg-gray-50 text-gray-500 border-gray-200",
+  blocked: "bg-slate-100 text-slate-600 border-slate-200",
 };
 
 function RequestCard({
@@ -180,7 +181,7 @@ export function BookingRequestsClient({
   }
 
   const pending = requests.filter((r) => r.status === "pending");
-  const confirmed = requests.filter((r) => r.status === "confirmed");
+  const confirmed = requests.filter((r) => r.status === "confirmed" || r.status === "blocked");
   const cancelled = requests.filter((r) => r.status === "cancelled");
 
   if (requests.length === 0) {
