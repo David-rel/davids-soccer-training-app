@@ -1,11 +1,6 @@
 import { NextRequest } from "next/server";
 
 import { syncCoachReminders } from "@/lib/coachReminders";
-import {
-  buildReminderMessages,
-  sendCoachReminderSms,
-  smsEnabled,
-} from "@/lib/coachReminderSms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,21 +19,5 @@ export async function GET(req: NextRequest) {
   }
 
   const result = await syncCoachReminders();
-
-  // ?dry=1 renders the texts that would go out, without sending them or
-  // marking anything notified. For checking wording and links safely.
-  if (req.nextUrl.searchParams.get("dry") === "1") {
-    const messages = await buildReminderMessages();
-    return Response.json({
-      ok: true,
-      ...result,
-      sms: { dry_run: true, enabled: smsEnabled(), messages },
-    });
-  }
-
-  const sms = smsEnabled()
-    ? await sendCoachReminderSms()
-    : { skipped: "COACH_REMINDER_SMS is not 'on'" };
-
-  return Response.json({ ok: true, ...result, sms });
+  return Response.json({ ok: true, ...result });
 }
